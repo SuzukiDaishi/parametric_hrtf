@@ -8,13 +8,18 @@
 
 PORT ?= 8000
 
-.PHONY: wasm-target test bundle serve dev clean
+.PHONY: wasm-target test test-rust test-js bundle serve dev clean
 
 wasm-target:
 	rustup target add wasm32-unknown-unknown
 
-test:
+test: test-rust test-js
+
+test-rust:
 	cargo test -p phrtf_distance_proximity -p phrtf-webclap
+
+test-js:
+	node --test crates/phrtf-webclap/ui/protocol.test.mjs
 
 bundle:
 	cargo xtask bundle-webclap --release

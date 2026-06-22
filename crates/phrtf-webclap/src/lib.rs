@@ -195,12 +195,7 @@ impl Plugin for PhrtfPlugin {
         }
 
         // Control-rate glide + (lazy) config rebuild, then refresh the filters.
-        self.current = SpatialPhrtfRenderer::smoothed_direction(self.current, self.target, SMOOTH_ALPHA);
-        if self.config_dirty {
-            self.renderer.set_config(self.config);
-            self.config_dirty = false;
-        }
-        self.renderer.update(self.current);
+        self.tick();
 
         match ctx.stereo_io() {
             Some(StereoIo { input_l, input_r, output_l, output_r }) => {
@@ -222,6 +217,28 @@ impl Plugin for PhrtfPlugin {
 }
 
 impl PhrtfPlugin {
+    /// Advance the control-rate state one block: glide the position toward its
+    /// target, apply any pending config change, and refresh the renderer's
+    /// filters. Shared by `process()` and the tests (which can't build a real
+    /// `ProcessCtx` on the host).
+    fn tick(&mut self) {
+        self.current =
+            SpatialPhrtfRenderer::smoothed_direction(self.current, self.target, SMOOTH_ALPHA);
+        if self.config_dirty {
+            self.renderer.set_config(self.config);
+            self.config_dirty = false;
+        }
+        self.renderer.update(self.current);
+    }
+
+    /// Spatialise a mono block to stereo, exactly as `process()` does once the
+    /// stereo bus has been summed to mono. Test-only.
+    #[cfg(test)]
+    fn render_block(&mut self, mono: &[f32], left: &mut [f32], right: &mut [f32]) {
+        self.tick();
+        self.renderer.process_block(mono, left, right);
+    }
+
     /// Apply a mutation to the cached config and flag a rebuild for next block.
     #[inline]
     fn set_cfg(&mut self, f: impl FnOnce(&mut RendererConfig)) {
@@ -277,5 +294,110 @@ mod tests {
         assert_eq!(p.get_param(P_EAR_OFFSET), 90.0);
         assert_eq!(p.get_param(P_N1_FRONT), 9000.0);
         assert!(p.config_dirty);
+    }
+
+    #[test]
+    fn every_param_default_is_in_range() {
+        for d in PARAMS {
+            assert!(
+                d.default >= d.min && d.default <= d.max,
+                "param {} default {} out of [{}, {}]",
+                d.id,
+                d.default,
+                d.min,
+                d.max,
+            );
+            assert!(d.min < d.max, "param {} has empty range", d.id);
+        }
+    }
+
+    /// Drive the plugin to steady state at one target and return per-ear RMS.
+    fn settle_rms(p: &mut PhrtfPlugin, input: &[f32]) -> (f32, f32) {
+        let mut l = vec![0.0f32; input.len()];
+        let mut r = vec![0.0f32; input.len()];
+        // Let the position smoother and filters reach the target.
+        for _ in 0..400 {
+            p.render_block(input, &mut l, &mut r);
+        }
+        (rms(&l), rms(&r))
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt()
+    }
+
+    fn sine(n: usize, freq: f32, sr: f32) -> Vec<f32> {
+        (0..n)
+            .map(|i| (2.0 * std::f32::consts::PI * freq * i as f32 / sr).sin())
+            .collect()
+    }
+
+    #[test]
+    fn right_source_is_louder_in_right_ear() {
+        let mut p = PhrtfPlugin::new();
+        p.activate(48_000.0, 256);
+        let input = sine(256, 1_000.0, 48_000.0);
+
+        p.set_param(P_AZIMUTH, 90.0);
+        let (left, right) = settle_rms(&mut p, &input);
+        assert!(right > left * 1.05, "right ear should dominate: L={left}, R={right}");
+
+        // Mirror to the left and the asymmetry must flip.
+        p.set_param(P_AZIMUTH, -90.0);
+        let (left2, right2) = settle_rms(&mut p, &input);
+        assert!(left2 > right2 * 1.05, "left ear should dominate: L={left2}, R={right2}");
+    }
+
+    #[test]
+    fn distance_gain_attenuates_far_sources() {
+        let mut p = PhrtfPlugin::new();
+        p.activate(48_000.0, 256);
+        let input = sine(256, 500.0, 48_000.0);
+
+        p.set_param(P_DISTANCE, 1.0);
+        let near = settle_rms(&mut p, &input);
+        p.set_param(P_DISTANCE, 8.0);
+        let far = settle_rms(&mut p, &input);
+
+        let near_e = near.0 + near.1;
+        let far_e = far.0 + far.1;
+        assert!(far_e < near_e * 0.6, "far source must be quieter: near={near_e}, far={far_e}");
+    }
+
+    #[test]
+    fn output_is_finite_across_the_sphere() {
+        let mut p = PhrtfPlugin::new();
+        p.activate(48_000.0, 128);
+        let input = sine(128, 2_000.0, 48_000.0);
+        let mut l = vec![0.0f32; 128];
+        let mut r = vec![0.0f32; 128];
+        for az in (-180..=180).step_by(30) {
+            for el in (-90..=90).step_by(45) {
+                p.set_param(P_AZIMUTH, az as f64);
+                p.set_param(P_ELEVATION, el as f64);
+                p.set_param(P_DISTANCE, 0.1);
+                for _ in 0..8 {
+                    p.render_block(&input, &mut l, &mut r);
+                }
+                assert!(
+                    l.iter().chain(r.iter()).all(|v| v.is_finite()),
+                    "non-finite output at az={az}, el={el}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn position_smoothing_is_not_instant() {
+        let mut p = PhrtfPlugin::new();
+        p.activate(48_000.0, 64);
+        p.set_param(P_AZIMUTH, 90.0);
+        // After a single block the smoothed position must be partway, not snapped.
+        p.tick();
+        assert!(
+            p.current.azimuth_deg > 1.0 && p.current.azimuth_deg < 89.0,
+            "one block should glide partway, got {}",
+            p.current.azimuth_deg,
+        );
     }
 }

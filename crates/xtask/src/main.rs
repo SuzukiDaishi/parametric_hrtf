@@ -152,7 +152,12 @@ fn copy_dir_recursive(from: &Path, to: &Path) -> Result<()> {
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;
-        let dest = to.join(entry.file_name());
+        let name = entry.file_name();
+        // Don't ship test files in the plugin bundle.
+        if name.to_string_lossy().contains(".test.") {
+            continue;
+        }
+        let dest = to.join(&name);
         if entry.file_type()?.is_dir() {
             copy_dir_recursive(&entry.path(), &dest)?;
         } else {

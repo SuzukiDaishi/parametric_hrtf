@@ -73,9 +73,17 @@ You can also drag-and-drop your own audio file onto the host page.
 ## Build & test
 
 ```bash
-make test            # DSP + adapter unit tests (native)
+make test            # Rust DSP + adapter tests, and the JS protocol test
+make test-rust       # just the Rust tests
+make test-js         # just the webview wire-format test (Node)
 make bundle          # build wasm + assemble dist/parametric-hrtf.wclap[.tar.gz]
 ```
+
+Test coverage: per-ear pHRTF divergence + zero-offset identity, position
+smoothing, lateral panning (near-ear louder), distance attenuation, finite
+output across the full sphere, silence-in/silence-out, `beta` monotonicity,
+elevation→notch movement, parameter round-trips/ranges, and the
+webview CBOR `set`/`params` wire format.
 
 The bundle is a standard `.wclap`: `module.wasm` + `plugin.json` + `ui/`. It
 loads in any WebCLAP host (the bundled `web/` one, or e.g.
