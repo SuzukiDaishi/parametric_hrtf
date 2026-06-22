@@ -1,0 +1,16 @@
+[package]
+name = "phrtf_distance_proximity"
+version = "0.1.0"
+edition = "2021"
+authors = ["ChatGPT generated prototype"]
+license = "MIT OR Apache-2.0"
+description = "Parametric HRTF renderer with distance attenuation, air absorption, head-shadow, ITD, and proximity-effect EQ."
+
+[lib]
+name = "phrtf_distance_proximity"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[dependencies]
