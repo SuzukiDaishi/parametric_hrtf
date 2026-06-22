@@ -22,7 +22,7 @@ use crate::air_absorption::{design_air_absorption_eq, AirAbsorptionEqConfig, Atm
 use crate::biquad::{high_shelf, BiquadChain, BiquadCoeffs};
 use crate::delay::FractionalDelay;
 use crate::geometry::{compute_ear_geometry, inverse_distance_gain, Direction3D, EarGeometry};
-use crate::math::clamp;
+use crate::math::{clamp, wrap_180};
 use crate::noise::{TurbulenceConfig, TurbulenceModulator};
 use crate::phrtf::{
     beta_from_direction, design_phrtf_bands, design_phrtf_bands_beta, PhrtfBandSet, PhrtfConfig,
@@ -386,10 +386,17 @@ impl SpatialPhrtfRenderer {
     }
 
     /// Helper for UI smoothing: update direction gradually toward a target.
+    ///
+    /// Azimuth is interpolated along the shortest arc on the circle. A source
+    /// crossing the rear therefore glides straight through `±180°` instead of
+    /// swinging all the way around the front when the target wraps from `+179°`
+    /// to `-179°` — which would otherwise be heard as a discontinuity at the
+    /// back.
     pub fn smoothed_direction(current: Direction3D, target: Direction3D, alpha: f32) -> Direction3D {
         let a = clamp(alpha, 0.0, 1.0);
+        let az_delta = wrap_180(target.azimuth_deg - current.azimuth_deg);
         Direction3D {
-            azimuth_deg: current.azimuth_deg + (target.azimuth_deg - current.azimuth_deg) * a,
+            azimuth_deg: wrap_180(current.azimuth_deg + az_delta * a),
             elevation_deg: current.elevation_deg + (target.elevation_deg - current.elevation_deg) * a,
             distance_m: current.distance_m + (target.distance_m - current.distance_m) * a,
         }

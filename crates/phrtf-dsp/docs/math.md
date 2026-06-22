@@ -43,16 +43,23 @@ alpha(f) = 8.686 f^2 [ classical + molecular ]
 ## 3. pHRTFのβ
 
 ```text
-front = cos(elevation) cos(azimuth)
-up    = sin(elevation)
-beta  = atan2(up, front)
+frontal_cos = cos(elevation) cos(azimuth)   // 正面軸 +x との内積
+beta        = acos(frontal_cos)              // 正面軸からの角度
+up          = sin(elevation)                 // 上下半球の判定にのみ使用
 ```
 
 ```text
 beta = 0°    front
-beta = 90°   above
+beta = 90°   above もしくは真横（±90°）
 beta = 180°  rear
 ```
+
+beta は「正面軸からの角度」で定義します。以前は `atan2(up, front)` で正中面へ
+投影していましたが、これは横方向の情報を front の符号へ畳み込むため、水平面の
+音源が ±90° を横切る瞬間に beta が 0°↔180° と不連続にジャンプしていました
+（真横でのスペクトルの急変）。`acos(cos(el)cos(az))` は全球で連続（前後の極を
+除いて滑らか）で、±90°・±180° のいずれの通過でも段差が出ません。正中面では
+従来どおり前方で仰角、後方で `180° − 仰角` に一致します。
 
 ## 4. N1/N2の仰角依存
 
