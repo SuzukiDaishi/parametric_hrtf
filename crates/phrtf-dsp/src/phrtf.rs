@@ -149,38 +149,55 @@ impl PhrtfBandSet {
 /// beta convention:
 ///
 /// - 0 deg: front horizon
-/// - 90 deg: up
+/// - 90 deg: up *or* directly to either side
 /// - 180 deg: rear horizon
+///
+/// `beta` is defined as the angle between the source direction and the frontal
+/// axis (`+x`), i.e. `acos` of the frontal direction cosine
+/// `cos(el)·cos(az)`. This is a smooth, full-sphere "how far back is it"
+/// coordinate.
+///
+/// The earlier implementation projected onto the median plane with
+/// `atan2(up, front)`. That projection collapses the lateral dimension onto the
+/// *sign* of `front`, so a horizontal source crossing `±90°` made `beta` jump
+/// instantly between `0°` (front) and `180°` (rear) — an audible spectral
+/// discontinuity at the sides. Measuring the angle from the frontal axis keeps
+/// `beta` continuous (and differentiable away from the exact front/rear poles)
+/// across the whole sphere, including the `±90°` and `±180°` crossings, while
+/// preserving the median-plane behaviour: on the median plane
+/// `acos(cos(el)·cos(az))` still equals the elevation angle in front and
+/// `180° − elevation` behind.
 ///
 /// The original model is upper-median-plane. For non-median directions this is a
 /// pragmatic projection, not a measured full-sphere PNP interpolation.
 pub fn beta_from_direction(direction: Direction3D, mode: LowerHemisphereMode) -> (f32, f32) {
     let az = deg_to_rad(direction.azimuth_deg);
     let el = deg_to_rad(direction.elevation_deg);
-    let front = el.cos() * az.cos();
     let up = el.sin();
 
+    // Angle from the frontal axis: 0 = front, 90 = up/side, 180 = rear.
+    // Continuous across ±90° and ±180° because it never tests the sign of a
+    // coordinate that is passing through zero.
+    let frontal_cos = clamp(el.cos() * az.cos(), -1.0, 1.0);
+    let beta = clamp(rad_to_deg(frontal_cos.acos()), 0.0, 180.0);
+
     if up >= 0.0 {
-        let mut beta = rad_to_deg(up.atan2(front));
-        if beta < 0.0 {
-            beta += 360.0;
-        }
-        (clamp(beta, 0.0, 180.0), 1.0)
+        (beta, 1.0)
     } else {
         match mode {
             LowerHemisphereMode::ClampToHorizon => {
-                if front >= 0.0 {
-                    (0.0, 0.15)
-                } else {
-                    (180.0, 0.15)
-                }
+                // Project to the nearest horizon (elevation → 0) but keep a
+                // smooth front/back angle so there is no step; only the cue
+                // depth is reduced. `acos(cos(az))` is the horizontal angle
+                // from the front and varies continuously through the sides.
+                let horizon_cos = clamp(az.cos(), -1.0, 1.0);
+                (clamp(rad_to_deg(horizon_cos.acos()), 0.0, 180.0), 0.15)
             }
             LowerHemisphereMode::MirrorWithReducedStrength { strength } => {
-                let mut beta = rad_to_deg((-up).atan2(front));
-                if beta < 0.0 {
-                    beta += 360.0;
-                }
-                (clamp(beta, 0.0, 180.0), clamp(strength, 0.0, 1.0))
+                // `beta` is already even in elevation (cos is even), so the
+                // lower hemisphere mirrors the upper one automatically; we only
+                // scale the spectral depth.
+                (beta, clamp(strength, 0.0, 1.0))
             }
         }
     }

@@ -47,13 +47,17 @@ source mono signal
 β = 180°  後方
 ```
 
-任意の3D方向は、正中面βへ投影しています。
+任意の3D方向は、正面軸（+x）からの角度として β を求めます。
 
 ```rust
-front = cos(elevation) * cos(azimuth)
-up    = sin(elevation)
-beta  = atan2(up, front)
+frontal_cos = cos(elevation) * cos(azimuth) // 正面軸との内積
+beta        = acos(frontal_cos)             // 正面軸からの角度（0..180°）
+up          = sin(elevation)                // 上下半球の判定にのみ使用
 ```
+
+以前の `atan2(up, front)` は正中面投影のため、水平面の音源が ±90° を横切る
+瞬間に β が 0°↔180° と不連続にジャンプし、真横でスペクトルが急変していました。
+`acos` 版は ±90°・±180° の通過を含め全球で連続です。
 
 下方向は元論文の対象外なので、デフォルトでは上側にミラーしつつスペクトル強度を弱めています。
 

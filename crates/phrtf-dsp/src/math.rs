@@ -47,3 +47,22 @@ pub fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
+
+/// Wrap an angle in degrees into the range `(-180, 180]`.
+///
+/// Azimuth is circular: a source just past the rear at `+179°` and one at
+/// `-179°` are nearly the same direction. Code that interpolates or differences
+/// azimuth must do so along the shortest arc, otherwise crossing the back
+/// (`±180°` wrap) makes the value swing all the way around the front. Use this
+/// to fold a difference or a running position back onto the circle.
+#[inline]
+pub fn wrap_180(deg: f32) -> f32 {
+    let wrapped = (deg + 180.0).rem_euclid(360.0) - 180.0;
+    // `rem_euclid` maps an exact +180 onto -180; keep it at +180 so a source
+    // held directly behind the listener has a stable representation.
+    if wrapped <= -180.0 {
+        180.0
+    } else {
+        wrapped
+    }
+}
