@@ -1,6 +1,22 @@
-[package]
-name = "parametric_hrtf_wclap"
-version = "0.1.0"
-edition = "2024"
+# Virtual workspace for the parametric HRTF project.
+#
+# - crates/phrtf-dsp      : dependency-free DSP library (the renderer itself)
+# - crates/wclap-plugin   : vendored CLAP/WCLAP wasm runtime scaffold
+# - crates/phrtf-webclap  : WebCLAP plugin adapter + GUI (compiles to wasm)
+# - crates/xtask          : `cargo xtask bundle-webclap` packager
+[workspace]
+resolver = "2"
+members = [
+    "crates/phrtf-dsp",
+    "crates/wclap-plugin",
+    "crates/phrtf-webclap",
+    "crates/xtask",
+]
 
-[dependencies]
+[profile.release]
+# Small, fast wasm: optimise for size + strip so the .wclap bundle stays lean.
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

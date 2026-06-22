@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>WCLAP Test Host</title>
+		<style>
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				display: grid;
+				grid-template-areas: "audio buttons cpu" "before before before" "main main main" "after after after";
+				grid-template-rows: min-content min-content 1fr min-content;
+				grid-template-columns: 2fr minmax(min-content, 1fr) 2rem;
+				
+				position: fixed;
+				margin: 0;
+				padding: 1rem;
+				gap: 1rem;
+				left: 0;
+				top: 0;
+				width: 100vw;
+				height: 100vh;
+				overflow: auto;
+				
+				font-family: Verdana, sans-serif;
+				background: #9a9aa3;
+				color: #000;
+			}
+			@media (max-width: 400pt) {
+				body {
+					grid-template-areas: "audio cpu" "buttons buttons" "before before" "main main" "after after";
+					grid-template-rows: min-content 2rem min-content 1fr min-content;
+					grid-template-columns: 1fr 2rem;
+				}
+			}
+			audio {
+				grid-area: audio;
+				width: 100%;
+				opacity: 0.98;
+			}
+			#background {
+				position: fixed;
+				left: 0;
+				top: 0;
+				width: 100vmax;
+				height: 100vmin;
+				object-fit: cover;
+				z-index: -1;
+				pointer-events: none;
+				opacity: 0.3;
+				animation: fadein03 ease-in-out 0.2s;
+				filter: grayscale(1);
+			}
+			#background2 {
+				position: fixed;
+				left: 0;
+				top: 0;
+				width: 100vw;
+				height: 100vh;
+				z-index: -2;
+				pointer-events: none;
+				animation: fadein03 ease-out 0.5s;
+				opacity: 0.3;
+			}
+			@keyframes fadein03 {
+				from {
+					opacity: 0.1;
+				}
+				to {
+					opacity: 0.3;
+				}
+			}
+			@media (max-aspect-ratio: 1) {
+				#background {
+					transform-origin: 50vmax 50vmax;
+					transform: rotate(-90deg);
+				}
+			}
+			#buttons, #tabs {
+				grid-area: buttons;
+				display: flex;
+				align-items: stretch;
+				justify-content: stretch;
+				min-height: 2rem;
+			}
+			button, select {
+				font: inherit;
+				border: 2px solid #CCC;
+				background: linear-gradient(#FFF, #DDD);
+				border-width: 2px 1px;
+				flex-grow: 1;
+				cursor: pointer;
+			}
+			select {
+				font-size: 0.8em;
+				white-space: normal;
+			}
+			button:focus, select:focus {
+				border-color: #AAA;
+			}
+			button:hover, select:hover {
+				filter: brightness(1.2);
+				-webkit-filter: brightness(1.2);
+			}
+			button:active, select:active {
+				background: linear-gradient(#DDD, #FFF);
+				border-color: #888;
+			}
+			button:first-child, select:first-child {
+				border-left-width: 2px;
+				border-radius: 0.5rem 0 0 0.5rem;
+			}
+			button:last-child, select:last-child {
+				border-right-width: 2px;
+				border-radius: 0 0.5rem 0.5rem 0;
+			}
+			#cpu {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 0.75rem;
+				opacity: 0.5;
+			}
+			#before {
+				grid-area: before;
+			}
+			#after {
+				grid-area: after;
+			}
+			main {
+				grid-area: main;
+				display: flex;
+				padding: 1rem;
+				gap: 1rem;
+				flex-direction: column;
+				background: #FFFAF272;
+				color: #000;
+				border-radius: 0.3rem;
+				box-shadow: 0px 2px 2px -1px #0003;
+				overflow: auto;
+			}
+			fieldset {
+				width: 100%;
+				max-width: 650pt;
+				margin: 0 auto;
+				background: #FFF;
+				border: none;
+				border-radius: 0.3rem;
+				box-shadow: 0px 2px 2px -1px #0003;
+			}
+			iframe {
+				flex-grow: 1;
+				width: 100%;
+				height: 100%;
+				border: none;
+				border-radius: 0.3rem;
+			}
+			main iframe {
+				/* funky border to make it clearer which part of the UI is hosted*/
+				background: #6F6;
+				border: 1px dashed #F0F;
+				box-shadow: 0px 0px 3px #F0FC;
+			}
+			label {
+				display: grid;
+				grid-template-areas: 'name input output';
+				grid-template-columns: 1fr 3fr minmax(5rex, 1fr);
+				width: 100%;
+			}
+			input[type=range] {
+				width: 100%;
+			}
+			output, .name {
+				margin: 0.5rem;
+			}
+			output {
+				overflow: hidden;
+				mask: linear-gradient(-90deg, #FFF0, #FFFD 1em, #FFF 2em);
+			}
+			.name {
+				text-align: right;
+			}
+			.file-drop {
+				opacity: 0.5;
+				filter: greyscale(0.5);
+				-webkit-filter: greyscale(0.5);
+			}
+			button.active {
+				background: #048;
+				color: #FFF;
+			}
+			#pause-overlay::backdrop {
+				position: absolute;
+				top: 10vh;
+				left: 0;
+				width: 100vw;
+				height: 90vh;
+				background: linear-gradient(#2010, #2014, #2016, #2014, #2010);
+				content: '';
+				z-index: -1;
+			}
+			*/
+		</style>
+	</head>
+	<body>
+		<script src="page-proxy-service-worker.js"></script>
+		
+		<!-- https://unsplash.com/photos/a-close-up-of-a-pink-and-blue-liquid-hNrd99q5peI -->
+		<img id="background" src="background.jpg">
+		<div id="background2"></div>
+		<audio id="media" controls loop crossorigin></audio>
+		<div id="buttons">
+			<select id="select-plugin-id" title="select plugin"></select>
+			<button id="button-link" title="copy link with state">🔗</button>
+			<button id="button-stopengine" title="stop audio engine">🛑</button>
+			<button id="button-reset" title="reset / reload">❌</button>
+		</div>
+		<div id="cpu"></div>
+		<div id="before"></div>
+		<main>
+			<div id="tabs">
+				<button id="tab-params">parameters</button>
+				<button id="tab-ui">UI</button>
+			</div>
+			<fieldset id="params"></fieldset>
+		</main>
+		<div id="after"></div>
+		<dialog id="pause-overlay">AudioContext paused</dialog>
+		<script type="module">
+			import ClapAudioNode from "./clap-audionode/clap-audionode.mjs";
+			import _for_debug from "./clap-audionode/clap-audioworkletprocessor.mjs"; // just to sanity-check syntax
+			
+			async function startPage() {
+				let pageProxy = await pageProxyReady;
+
+				let queryParams = new URLSearchParams(window.location.search);
+				function updateQuery() {
+					history.replaceState(null, null, '?' + queryParams);
+				}
+
+				let $ = document.querySelector.bind(document);
+				let audioContext = new AudioContext();
+				let overlay = document.querySelector('#pause-overlay');
+				overlay.showModal();
+				audioContext.addEventListener('statechange', e => {
+					if (audioContext.state == 'running') {
+						overlay.close();
+					} else {
+						overlay.showModal();
+					}
+				});
+				
+				let audioElement = $('audio');
+				audioElement.src = queryParams.get('audio') || 'audio/loop.mp3';
+				let audioSource = audioContext.createMediaElementSource(audioElement);
+				
+				document.body.addEventListener('dragover', e => {
+					document.body.classList.add('file-drop');
+					e.preventDefault();
+					e.stopPropagation();
+				});
+				document.body.addEventListener('dragcancel', e => {
+					document.body.classList.remove('file-drop');
+				});
+				document.body.addEventListener('drop', e => {
+					document.body.classList.remove('file-drop');
+					let file = e.dataTransfer.items?.[0]?.getAsFile?.() || e.dataTransfer.files?.[0];
+					if (/^blob:/.test(audioElement.src)) {
+						URL.revokeObjectURL(audioElement.src);
+					}
+					audioElement.src = URL.createObjectURL(file);
+					audioElement.play();
+					e.preventDefault();
+					e.stopPropagation();
+				});
+				
+				['pointerdown'].forEach(name => {
+					window.addEventListener(name, e => {
+						audioContext.resume(name);
+					}, {capture: true});
+				});
+				['play'].forEach(name => {
+					window.addEventListener(name, e => audioContext.resume(name), {capture: true});
+				});
+				
+				function blip(message, event) {
+					let span = document.createElement('span');
+					span.setAttribute('style', 'display:block;padding: 0.5rem;position:absolute;background:#FFF;color:#555;font-size:0.8rem;border-radius:0.3rem;box-shadow:0px 2px 4px #0008;z-index:10000');
+					span.textContent = message;
+					(event?.target || document.body).append(span);
+					span.onclick = e => {
+						span.remove();
+						e.preventDefault();
+						e.stopPropagation();
+					};
+					setTimeout(_ => span.remove(), 1500);
+				}
+
+				$('#select-plugin-id').onchange = _ => {
+					let id = $('#select-plugin-id').value;
+					queryParams.set("plugin", id);
+					queryParams.delete('state');
+					// Reloads the whole page
+					location.href = '?' + queryParams;
+				};
+				$('#button-link').onclick = async e => {
+					navigator.clipboard.writeText(location.href);
+					await updateQueryState();
+					await navigator.clipboard.writeText(location.href);
+					blip("copied", e);
+				};
+				$('#button-stopengine').onclick = _ => {
+					audioElement.pause();
+					audioContext.suspend();
+				};
+				$('#button-reset').onclick = _ => {
+					queryParams.delete('state');
+					// Reloads the whole page
+					location.href = '?' + queryParams;
+				};
+				
+				let wasmUrl = queryParams.get('module') || 'examples/signalsmith-basics/basics.wclap.tar.gz';
+				let module = new ClapAudioNode({
+					url: wasmUrl,
+//					timerWorklet: true // for more accurate CPU estimate
+				});
+				let pluginId = queryParams.get('plugin') || null;
+				await module.plugins().then(plugins => {
+					let select = $('#select-plugin-id');
+					if (plugins.length <= 1) {
+						select.remove();
+						return;
+					}
+					plugins.forEach(plugin => {
+						let option = document.createElement('option');
+						option.value = plugin.id;
+						option.textContent = plugin.name;
+						console.log(plugin);
+						
+						select.appendChild(option);
+						if (plugin.id == pluginId) {
+							option.selected = true;
+							select.value = pluginId;
+						}
+					});
+				});
+				let effectNode = await module.createNode(audioContext, pluginId, {
+					numberOfInputs: 1,
+					numberOfOutputs: 1,
+					outputChannelCount: [2]
+				});
+				document.title = `${effectNode.descriptor.name} (${effectNode.descriptor.vendor}) - ` + document.title;
+				if (queryParams.get('state')) {
+					let binary = atob(queryParams.get('state').replace(/-/g, '+').replace(/_/g, '/'));
+					let array = new Uint8Array(binary.length);
+					array.forEach((c, i) => array[i] = binary.charCodeAt(i));
+					await effectNode.loadState(array.buffer);
+				}
+				audioSource.connect(effectNode);
+				effectNode.connect(audioContext.destination);
+				globalThis.effectNode = effectNode;
+				
+				let paramUpdateFns = [];
+				effectNode.events.params_rescan = flags => {
+					paramUpdateFns.forEach(fn => fn());
+				};
+				let updateQueryStateTimer = null;
+				async function updateQueryState() {
+					updateQueryStateTimer = null;
+					
+					let state = await effectNode.saveState();
+					state = new Uint8Array(ArrayBuffer.isView(state) ? state.buffer : state);
+					let binary = "";
+					state.forEach(c => binary += String.fromCharCode(c));
+					queryParams.set('state', btoa(binary).replace(/\+/g, '-').replace(/\//g, '_'));
+					updateQuery();
+				}
+				effectNode.events.state_mark_dirty = async () => {
+					if (updateQueryStateTimer) return;
+					updateQueryStateTimer = setTimeout(updateQueryState, 100);
+				};
+
+				let extrasModule = new ClapAudioNode("./examples/signalsmith-clap-cpp/example-plugins.wclap.tar.gz");
+				let keyboardBefore = ['note-effect', 'instrument'].some(feature => effectNode.descriptor.features.indexOf(feature) >= 0);
+				let keyboardAfter = ['note-effect', 'note-detector'].some(feature => effectNode.descriptor.features.indexOf(feature) >= 0);
+				let scopeBefore = ['audio-effect', 'note-detector'].some(feature => effectNode.descriptor.features.indexOf(feature) >= 0);
+				let scopeAfter = ['audio-effect', 'instrument'].some(feature => effectNode.descriptor.features.indexOf(feature) >= 0);
+				if (keyboardBefore) {
+					let keyboardNode = await extrasModule.createNode(audioContext, "uk.co.signalsmith-audio.plugins.example-keyboard", {
+						numberOfInputs: 1,
+						numberOfOutputs: 1,
+						outputChannelCount: [2]
+					});
+					keyboardNode.connect(effectNode);
+					keyboardNode.connectEvents(effectNode);
+					document.querySelector("#before").append(openInterfaceWithProxy(keyboardNode, '4rem'));
+				}
+				if (keyboardAfter) {
+					let keyboardNode = await extrasModule.createNode(audioContext, "uk.co.signalsmith-audio.plugins.example-keyboard", {
+						numberOfInputs: 1,
+						numberOfOutputs: 1,
+						outputChannelCount: [2]
+					});
+					effectNode.connect(keyboardNode);
+					effectNode.connectEvents(keyboardNode);
+					document.querySelector("#after").append(openInterfaceWithProxy(keyboardNode, '8rem'));
+				}
+
+				function makeSlider(param) {
+					let group = $('#params');
+					let label = document.createElement('label');
+					
+					let name = document.createElement('span');
+					name.classList.add('name');
+					name.append(param.name);
+
+					let input = document.createElement('input');
+					input.type = 'range';
+					input.min = param.min;
+					input.max = param.max;
+					input.step = param.flags.stepped ? 1 : 1e-6;
+					let writeValue = input.oninput = async e => {
+						param.value = await effectNode.setParam(param.id, parseFloat(input.value));
+						output.textContent = param.value.text;
+					};
+					let readValue = async e => {
+						param.value = await effectNode.getParam(param.id);
+						input.value = param.value.value;
+						output.textContent = param.value.text;
+					};
+					readValue();
+					paramUpdateFns.push(readValue);
+					input.ondblclick = e => {
+						input.value = param['default'];
+						writeValue();
+					};
+					
+					let output = document.createElement('output');
+					if (!param.value) debugger;
+					output.textContent = param.value.text;
+
+					label.append(name, input, output);
+					group.append(label);
+				}
+
+				let params = await effectNode.getParams();
+				params.forEach(makeSlider);
+
+				let iframe;
+				function openInterfaceWithProxy(effectNode, height) {
+					let frameId = "iframe-" + crypto.randomUUID();
+					let iframe = effectNode.openInterface({
+						filePrefix: pageProxy.prefix + frameId + "/file",
+						resourcePrefix: pageProxy.prefix + frameId + "/get_resource"
+					});
+					iframe.id = frameId;
+					iframe[pageProxy.symbol] = async path => {
+						if (/^\/file\//.test(path)) {
+							return effectNode.getFile(path.substr(5));
+						} else if (/^\/get_resource\//.test(path)) {
+							return effectNode.getResource(path.substr(13));
+						}
+					};
+					if (height) iframe.style.height = height;
+					return iframe;
+				}
+				
+				function selectTab(webUi) {
+					if (iframe) {
+						// tell the effect that the webview is closed
+						effectNode.closeInterface();
+						iframe.remove();
+						iframe = null;
+					}
+
+					if (webUi) {
+						$('#tab-params').classList.remove("active");
+						$('#tab-ui').classList.add("active");
+						$('#params').style.display = 'none';
+						if (effectNode.openInterface) {
+							iframe = openInterfaceWithProxy(effectNode);
+							$('main').append(iframe);
+						}
+					} else {
+						$('#tab-params').classList.add("active");
+						$('#tab-ui').classList.remove("active");
+						let group = $('#params').style.display = 'block';
+					}
+				}
+				if (effectNode.openInterface) {
+					$('#tab-params').addEventListener('click', _ => selectTab(false));
+					$('#tab-ui').addEventListener('click', _ => selectTab(true));
+					selectTab(true);
+				} else {
+					$('#tabs').style.display = 'none';
+					selectTab(false);
+				}
+				
+				setInterval(async _ => {
+					let ms = await effectNode.performance();
+					let ratioWasm = ms.wasm/ms.block;
+					let ratioJs = ms.js/ms.block - ratioWasm;
+					$('#cpu').textContent = `${(ratioWasm*100).toFixed(1)}%\n${(ratioJs*100).toFixed(1)}%`;
+				}, 1000);
+			}
+			startPage();
+
+			// Vary the colour scheme based on `?module=...` URL
+			crypto.subtle.digest("SHA-256", new TextEncoder().encode(new URLSearchParams(location.search).get('module')).buffer).then(b => {
+				let values = Array.from(new Uint16Array(b)).map(x => x/65536);
+
+				let style = document.createElement('style');
+				let sepia = values.pop()/2;
+				let invert = (values.pop() < 0.6) ? '0' : '1';
+				style.textContent = `#background,#pause-overlay::backdrop{filter:hue-rotate(150deg) sepia(${sepia}) hue-rotate(${values.pop()*360}deg) saturate(${1 + sepia}) invert(${invert})}#background2{background: linear-gradient(${values.pop()*360}deg, #F80, #F08, #80F, #08F)}`;
+				document.head.appendChild(style);
+			});
+		</script>
+	</body>
+</html>

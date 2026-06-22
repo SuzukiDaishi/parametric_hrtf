@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parametric HRTF</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="title">
+          <span class="logo">◐</span>
+          <div>
+            <h1>Parametric HRTF</h1>
+            <p class="sub">per-ear pHRTF · ITD/ILD · head shadow · distance · proximity</p>
+          </div>
+        </div>
+        <span id="status" class="status">READY</span>
+      </header>
+
+      <main class="grid">
+        <!-- Spatial pad: drag the source around the head (azimuth + distance) -->
+        <section class="card pad-card">
+          <h2>Source Position <small id="pad-readout"></small></h2>
+          <svg id="pad" viewBox="0 0 320 320" aria-label="spatial position pad">
+            <defs>
+              <radialGradient id="padglow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#1b2740" />
+                <stop offset="100%" stop-color="#0c1220" />
+              </radialGradient>
+            </defs>
+            <circle cx="160" cy="160" r="150" fill="url(#padglow)" stroke="#243049" />
+            <circle cx="160" cy="160" r="100" class="ring" />
+            <circle cx="160" cy="160" r="50" class="ring" />
+            <line x1="160" y1="10" x2="160" y2="310" class="ring" />
+            <line x1="10" y1="160" x2="310" y2="160" class="ring" />
+            <text x="160" y="24" class="cardinal">FRONT</text>
+            <text x="160" y="304" class="cardinal">REAR</text>
+            <text x="20" y="164" class="cardinal" text-anchor="start">L</text>
+            <text x="300" y="164" class="cardinal" text-anchor="end">R</text>
+            <!-- head -->
+            <g id="head">
+              <circle cx="160" cy="160" r="20" class="head" />
+              <circle cx="151" cy="155" r="2.5" class="eye" />
+              <circle cx="169" cy="155" r="2.5" class="eye" />
+            </g>
+            <line id="ray" x1="160" y1="160" x2="160" y2="60" class="ray" />
+            <g id="source">
+              <circle r="11" class="src-halo" />
+              <circle r="7" class="src-dot" />
+            </g>
+          </svg>
+          <div class="pad-controls">
+            <label class="slider">
+              <span class="lab">Elevation</span>
+              <input type="range" id="elev" min="-90" max="90" step="1" value="0" />
+              <output id="elev-out">0°</output>
+            </label>
+            <label class="slider">
+              <span class="lab">Distance</span>
+              <input type="range" id="dist" min="0.05" max="20" step="0.01" value="1" />
+              <output id="dist-out">1.00 m</output>
+            </label>
+          </div>
+        </section>
+
+        <!-- Engine toggles + global controls -->
+        <section class="card">
+          <h2>Engine</h2>
+          <div id="toggles" class="toggles"></div>
+          <div id="globals" class="sliders"></div>
+        </section>
+
+        <!-- pHRTF personalization -->
+        <section class="card">
+          <h2>pHRTF Voicing</h2>
+          <div id="voicing" class="sliders"></div>
+        </section>
+      </main>
+    </div>
+    <script src="main.js"></script>
+  </body>
+</html>

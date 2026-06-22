@@ -1,0 +1,10 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Build + package the Parametric HRTF WebCLAP bundle (`cargo xtask bundle-webclap`)."
+
+[dependencies]
+flate2 = "1"
+tar = "0.4"

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 1,
+  "id": "dev.phrtf.parametric-hrtf",
+  "name": "Parametric HRTF",
+  "vendor": "suzukidaishi",
+  "version": "0.1.0",
+  "description": "Parametric HRTF binaural spatialiser: per-ear pHRTF peak/notch cascade, ITD/ILD, head shadow, distance gain, air absorption and proximity EQ.",
+  "features": ["audio-effect", "spatial", "surround"],
+  "license": "MIT OR Apache-2.0",
+  "homepage": "https://github.com/SuzukiDaishi/parametric_hrtf",
+  "source": "src/",
+  "artifact": "../../target/wasm32-unknown-unknown/release/phrtf_webclap.wasm",
+  "format": "wasm",
+  "has_ui": true,
+  "ui": {
+    "compact_size": { "width": 560, "height": 620 },
+    "expanded_size": { "width": 900, "height": 640 }
+  },
+  "plugins": [
+    {
+      "id": "dev.phrtf.parametric-hrtf",
+      "name": "Parametric HRTF",
+      "features": ["audio-effect", "spatial", "surround"],
+      "has_ui": true
+    }
+  ]
+}

@@ -1,1 +1,6 @@
 /target
+
+# Build output of `cargo xtask bundle-webclap`. The loadable bundle is also
+# copied to `web/parametric-hrtf.wclap.tar.gz`, which IS committed so the
+# bundled host runs out of the box.
+/dist

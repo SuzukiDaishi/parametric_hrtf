@@ -1,0 +1,18 @@
+[package]
+name = "phrtf-webclap"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+description = "Parametric HRTF spatialiser, packaged as a real WCLAP audio-effect plugin with a GUI."
+
+[lib]
+name = "phrtf_webclap"
+crate-type = ["cdylib"]
+
+[dependencies]
+# `default-features = false`: the DSP crate pulls in std, which already
+# provides the panic handler + global allocator on wasm32, so we don't want
+# wclap-plugin's no_std runtime fighting it (same setup as z-audio-webclap-eq).
+wclap-plugin = { path = "../wclap-plugin", default-features = false }
+phrtf_distance_proximity = { path = "../phrtf-dsp" }
