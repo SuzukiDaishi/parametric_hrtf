@@ -96,7 +96,6 @@ class Wasi {
 					wasiA.set(otherA);
 				},
 				procExit() {
-					debugger;
 					throw new Error("Fatal error - but fully stopping is not supported");
 				},
 				stdoutLine: (wasiP, size) => {

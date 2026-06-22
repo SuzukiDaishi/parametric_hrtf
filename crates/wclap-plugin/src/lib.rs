@@ -762,12 +762,12 @@ pub fn init_plugin<P: Plugin>(def: &'static PluginDef) {
         "wclap-plugin: too many feature tags",
     );
     unsafe {
-        clap_entry.init = entry_init as usize as u32;
-        clap_entry.get_factory = entry_get_factory as usize as u32;
+        clap_entry.init = entry_init as *const () as usize as u32;
+        clap_entry.get_factory = entry_get_factory as *const () as usize as u32;
 
-        FACTORY.get_plugin_count = factory_get_plugin_count as usize as u32;
-        FACTORY.get_plugin_descriptor = factory_get_plugin_descriptor as usize as u32;
-        FACTORY.create_plugin = factory_create_plugin as usize as u32;
+        FACTORY.get_plugin_count = factory_get_plugin_count as *const () as usize as u32;
+        FACTORY.get_plugin_descriptor = factory_get_plugin_descriptor as *const () as usize as u32;
+        FACTORY.create_plugin = factory_create_plugin as *const () as usize as u32;
 
         DESCRIPTOR.id = def.id.as_ptr() as u32;
         DESCRIPTOR.name = def.name.as_ptr() as u32;
@@ -783,10 +783,10 @@ pub fn init_plugin<P: Plugin>(def: &'static PluginDef) {
         FEATURES_TABLE[def.features.len()] = 0;
         DESCRIPTOR.features = FEATURES_TABLE.as_ptr() as u32;
 
-        AUDIO_PORTS_EXT.count = audio_ports_count as usize as u32;
-        AUDIO_PORTS_EXT.get = audio_ports_get as usize as u32;
-        NOTE_PORTS_EXT.count = note_ports_count as usize as u32;
-        NOTE_PORTS_EXT.get = note_ports_get as usize as u32;
+        AUDIO_PORTS_EXT.count = audio_ports_count as *const () as usize as u32;
+        AUDIO_PORTS_EXT.get = audio_ports_get as *const () as usize as u32;
+        NOTE_PORTS_EXT.count = note_ports_count as *const () as usize as u32;
+        NOTE_PORTS_EXT.get = note_ports_get as *const () as usize as u32;
 
         DEF.audio_inputs = def.audio_inputs;
         DEF.audio_outputs = def.audio_outputs;
@@ -796,9 +796,9 @@ pub fn init_plugin<P: Plugin>(def: &'static PluginDef) {
             // `len - 1` strips the trailing NUL we required in PluginDef.
             DEF.ui_path_ptr = path.as_ptr();
             DEF.ui_path_len = (path.len() as u32).saturating_sub(1);
-            WEBVIEW_EXT.get_uri = webview_get_uri as usize as u32;
-            WEBVIEW_EXT.get_resource = webview_get_resource as usize as u32;
-            WEBVIEW_EXT.receive = webview_receive as usize as u32;
+            WEBVIEW_EXT.get_uri = webview_get_uri as *const () as usize as u32;
+            WEBVIEW_EXT.get_resource = webview_get_resource as *const () as usize as u32;
+            WEBVIEW_EXT.receive = webview_receive as *const () as usize as u32;
         }
 
         VTABLE.new = Some(thunk_new::<P>);
@@ -815,25 +815,25 @@ pub fn init_plugin<P: Plugin>(def: &'static PluginDef) {
 
         // clap.latency is unconditionally exposed; plugins that don't
         // override `latency_samples()` simply report 0.
-        LATENCY_EXT.get = latency_get as usize as u32;
+        LATENCY_EXT.get = latency_get as *const () as usize as u32;
 
         // clap.state — generic param-dump persistence (save = every declared
         // param's (id, value); load = replay via set_param). Exposed whenever
         // the plugin has params; plugins with richer internal state can get a
         // bespoke path later without breaking this blob (it's versioned).
-        STATE_EXT.save = state_save as usize as u32;
-        STATE_EXT.load = state_load as usize as u32;
+        STATE_EXT.save = state_save as *const () as usize as u32;
+        STATE_EXT.load = state_load as *const () as usize as u32;
 
         let params_slice = P::params();
         DEF.params_ptr = params_slice.as_ptr();
         DEF.params_len = params_slice.len() as u32;
         if !params_slice.is_empty() {
-            PARAMS_EXT.count = params_count as usize as u32;
-            PARAMS_EXT.get_info = params_get_info as usize as u32;
-            PARAMS_EXT.get_value = params_get_value as usize as u32;
-            PARAMS_EXT.value_to_text = params_value_to_text as usize as u32;
-            PARAMS_EXT.text_to_value = params_text_to_value as usize as u32;
-            PARAMS_EXT.flush = params_flush as usize as u32;
+            PARAMS_EXT.count = params_count as *const () as usize as u32;
+            PARAMS_EXT.get_info = params_get_info as *const () as usize as u32;
+            PARAMS_EXT.get_value = params_get_value as *const () as usize as u32;
+            PARAMS_EXT.value_to_text = params_value_to_text as *const () as usize as u32;
+            PARAMS_EXT.text_to_value = params_text_to_value as *const () as usize as u32;
+            PARAMS_EXT.flush = params_flush as *const () as usize as u32;
         }
     }
 }
@@ -1077,43 +1077,43 @@ extern "C" fn factory_create_plugin(_factory: u32, host: u32, plugin_id_ptr: u32
         write_u32(plugin_ptr + offsets::plugin::PLUGIN_DATA as u32, state_ptr);
         write_u32(
             plugin_ptr + offsets::plugin::INIT as u32,
-            plugin_init as usize as u32,
+            plugin_init as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::DESTROY as u32,
-            plugin_destroy as usize as u32,
+            plugin_destroy as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::ACTIVATE as u32,
-            plugin_activate as usize as u32,
+            plugin_activate as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::DEACTIVATE as u32,
-            plugin_deactivate as usize as u32,
+            plugin_deactivate as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::START_PROCESSING as u32,
-            plugin_start_processing as usize as u32,
+            plugin_start_processing as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::STOP_PROCESSING as u32,
-            plugin_stop_processing as usize as u32,
+            plugin_stop_processing as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::RESET as u32,
-            plugin_reset as usize as u32,
+            plugin_reset as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::PROCESS as u32,
-            plugin_process as usize as u32,
+            plugin_process as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::GET_EXTENSION as u32,
-            plugin_get_extension as usize as u32,
+            plugin_get_extension as *const () as usize as u32,
         );
         write_u32(
             plugin_ptr + offsets::plugin::ON_MAIN_THREAD as u32,
-            plugin_on_main_thread as usize as u32,
+            plugin_on_main_thread as *const () as usize as u32,
         );
     }
     plugin_ptr

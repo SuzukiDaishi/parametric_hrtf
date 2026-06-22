@@ -1,4 +1,4 @@
-import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs";
+import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs?v=20260623u";
 import {hostImports} from "./host-imports.mjs";
 import CBOR from "./cbor.mjs";
 
@@ -10,6 +10,12 @@ if (!globalThis.clapRouting) {
 	// Map from instance ID -> `{events: [...]}`
 	globalThis.clapRouting = Object.create(null);
 }
+
+const routingCleanupRegistry = (typeof FinalizationRegistry === 'function')
+	? new FinalizationRegistry(routingId => {
+		delete globalThis.clapRouting[routingId];
+	})
+	: {register() {}};
 
 let now = (typeof performance === 'object') ? performance.now.bind(performance) : Date.now.bind(Date);
 let cpuAveragePeriod = (typeof performance === 'object') ? 50 : 10000; // 150ms or 30s @ 44.1kHz
@@ -44,9 +50,6 @@ class ClapAudioWorkletProcessor extends AudioWorkletProcessor {
 	readyPromise = null;
 	running = true;
 	routingId;
-	static #cleanup = new FinalizationRegistry(routingId => {
-		delete globalThis.clapRouting[routingId];
-	});
 
 	decodeCbor() {
 		let cborPtr = this.hostApi.getBytesData(this.hostedBytes);
@@ -76,7 +79,6 @@ class ClapAudioWorkletProcessor extends AudioWorkletProcessor {
 		super();
 		this.port.onmessageerror = e => {
 			console.error(e);
-			debugger;
 		};
 		let readyFn = null;
 		this.readyPromise = new Promise(pass => (readyFn = pass));
@@ -146,7 +148,7 @@ class ClapAudioWorkletProcessor extends AudioWorkletProcessor {
 			globalThis.clapRouting[this.routingId] = {
 				events: []
 			};
-			ClapAudioWorkletProcessor.#cleanup.register(this, this.routingId);
+			routingCleanupRegistry.register(this, this.routingId);
 			
 			this.pluginPtr = hostApi.createPlugin(this.hostedWclapPtr, this.encodeString(pluginId));
 			if (!this.pluginPtr) {
@@ -197,7 +199,6 @@ class ClapAudioWorkletProcessor extends AudioWorkletProcessor {
 
 	fatalError = null;
 	failWithError(e) {
-		debugger;
 		console.error(e);
 		this.fatalError = e;
 		throw e;
@@ -264,12 +265,34 @@ class ClapAudioWorkletProcessor extends AudioWorkletProcessor {
 			return this.remoteMethods.getParam.call(this, paramId);
 		},
 		getParam(paramId) {
-			return this.decodeCbor(this.hostApi.pluginGetParam(this.pluginPtr, paramId, this.hostedBytes));
+			try {
+				return this.decodeCbor(this.hostApi.pluginGetParam(this.pluginPtr, paramId, this.hostedBytes));
+			} catch (e) {
+				let msg = String(e?.message || e);
+				if (!msg.includes('BigInt')) throw e;
+
+				// Fallback path: some host/wasm ABI combinations fail on pluginGetParam,
+				// but pluginGetParams still returns the full parameter snapshot.
+				let params = this.decodeCbor(this.hostApi.pluginGetParams(this.pluginPtr, this.hostedBytes));
+				let match = params.find(p => p.id === paramId);
+				if (!match) throw e;
+				return match.value;
+			}
 		},
 		getParams() {
 			let params = this.decodeCbor(this.hostApi.pluginGetParams(this.pluginPtr, this.hostedBytes));
 			params.forEach(param => {
-				param.value = this.remoteMethods.getParam.call(this, param.id);
+				try {
+					param.value = this.remoteMethods.getParam.call(this, param.id);
+				} catch (e) {
+					let msg = String(e?.message || e);
+					if (!msg.includes('BigInt')) throw e;
+					// Keep value from pluginGetParams snapshot.
+				}
+				if (!param.value) {
+					let v = (typeof param.default === 'number') ? param.default : ((typeof param.min === 'number') ? param.min : 0);
+					param.value = {value: v, text: String(v)};
+				}
 			});
 			return params;
 		},

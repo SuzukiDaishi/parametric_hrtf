@@ -1,4 +1,4 @@
-import {runThread} from "./wclap-js/wclap.mjs";
+import {runThread} from "./wclap-js/wclap.mjs?v=20260623u";
 
 export function hostImports() {
 	// imports for our particular host go here

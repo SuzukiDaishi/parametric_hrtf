@@ -56,7 +56,6 @@ class WclapHost {
 		}
 		if (!wclapInit.memory) {
 			console.error("Plugin attempted to start a new thread, but has no shared memory");
-			debugger;
 			return -1;
 		}
 
@@ -166,11 +165,22 @@ class WclapHost {
 					wasmFn = entryDataView.getUint32(wasmFn, true);
 				}
 
+				// Index 0 is commonly used as a null function pointer in Wasm interop.
+				// Treat it as an empty call result instead of warning/erroring.
+				if (wasmFn === 0) {
+					let dataView = new DataView(this.hostMemory.buffer);
+					dataView.setUint8(resultPtr, 0);
+					dataView.setUint32(resultPtr + 8, 0, true);
+					return;
+				}
+
 				let dataView = new DataView(this.hostMemory.buffer);
 				let args = [];
+				let argTypes = [];
 				for (let i = 0; i < argsCount; ++i) {
 					let ptr = argsPtr + i*16;
 					let type = dataView.getUint8(ptr);
+					argTypes.push(type);
 					if (type == 0) {
 						args.push(dataView.getUint32(ptr + 8, true));
 					} else if (type == 1) {
@@ -184,7 +194,60 @@ class WclapHost {
 					}
 				}
 
-				let result = entry.functionTable.get(wasmFn)(...args);
+				let wasmCallable = entry.functionTable.get(wasmFn);
+				if (typeof wasmCallable !== 'function') {
+					console.warn('Ignoring non-callable wasm table entry', {wasmFn, argsCount});
+					dataView.setUint8(resultPtr, 0);
+					dataView.setUint32(resultPtr + 8, 0, true);
+					return;
+				}
+
+				let result;
+				try {
+					result = wasmCallable(...args);
+				} catch (e) {
+					let msg = String(e?.message || e);
+					let maybeBigIntMismatch = msg.includes('BigInt');
+					if (!maybeBigIntMismatch) throw e;
+
+					// Retry by exploring number/bigint coercions per integer-like arg.
+					let choices = args.map(v => {
+						if (typeof v === 'number' && Number.isInteger(v)) return [v, BigInt(v)];
+						if (typeof v === 'bigint') {
+							let asNumber = Number(v);
+							if (Number.isSafeInteger(asNumber)) return [v, asNumber];
+						}
+						return [v];
+					});
+
+					let recovered = false;
+					let maxBranchArgs = Math.min(choices.length, 10);
+					let totalVariants = 1;
+					for (let i = 0; i < maxBranchArgs; ++i) {
+						totalVariants *= choices[i].length;
+					}
+
+					for (let variant = 1; variant < totalVariants; ++variant) {
+						let retryArgs = args.slice();
+						let state = variant;
+						for (let i = 0; i < maxBranchArgs; ++i) {
+							let opts = choices[i];
+							let pick = state % opts.length;
+							state = Math.floor(state / opts.length);
+							retryArgs[i] = opts[pick];
+						}
+						try {
+							result = wasmCallable(...retryArgs);
+							recovered = true;
+							break;
+						} catch (retryError) {
+							let retryMsg = String(retryError?.message || retryError);
+							if (!retryMsg.includes('BigInt')) throw retryError;
+						}
+					}
+
+					if (!recovered) throw e;
+				}
 				if (result == null) {
 					dataView.setUint8(resultPtr, 0);
 					dataView.setUint32(resultPtr + 8, 0, true);
@@ -197,10 +260,10 @@ class WclapHost {
 				} else if (typeof result == 'number') {
 					dataView.setUint8(resultPtr, 3);
 					dataView.setFloat64(resultPtr + 8, result, true);
-				} else if (result instanceof BigInt && result >= 0n) {
+				} else if (typeof result === 'bigint' && result >= 0n) {
 					dataView.setUint8(resultPtr, 1);
 					dataView.setBigUint64(resultPtr + 8, result, true);
-				} else if (result instanceof BigInt && result < 0n) {
+				} else if (typeof result === 'bigint' && result < 0n) {
 					dataView.setUint8(resultPtr, 1);
 					dataView.setBigInt64(resultPtr + 8, result, true);
 				} else {

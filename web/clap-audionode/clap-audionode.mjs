@@ -1,4 +1,4 @@
-import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs";
+import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs?v=20260623u";
 import {hostImports, startThreadWorker} from "./host-imports.mjs";
 import CBOR from "./cbor.mjs";
 
@@ -84,7 +84,7 @@ export default class ClapAudioNode {
 
 		// Add the AudioWorkletProcessor module
 		if (!audioContext[this.#moduleAddedToAudioContext]) {
-			let moduleUrl = new URL('./clap-audioworkletprocessor.mjs', import.meta.url);
+			let moduleUrl = new URL('./clap-audioworkletprocessor.mjs?v=20260623u', import.meta.url);
 			await audioContext.audioWorklet.addModule(moduleUrl);
 		}
 		audioContext[this.#moduleAddedToAudioContext] = true;
@@ -120,7 +120,16 @@ export default class ClapAudioNode {
 
 		effectNode.getFile = async path => {
 			let files = (await this.#ready).files;
-			return files[path.replace(/[?#].*/, '')];
+			let cleanPath = decodeURIComponent(path.replace(/[?#].*/, ''));
+			let normalized = cleanPath.replace(/^\/+/, '');
+			let direct = files[cleanPath] || files['/' + normalized] || files[normalized];
+			if (direct != null) return direct;
+
+			let suffix = '/' + normalized;
+			for (let key of Object.keys(files)) {
+				if (key.endsWith(suffix)) return files[key];
+			}
+			return null;
 		};
 
 		// Hacky event-handling: add a named function to this map
@@ -151,6 +160,7 @@ export default class ClapAudioNode {
 				let prevGetResource = effectNode.getResource;
 				effectNode.getResource = async path => {
 					let obj = await prevGetResource(path);
+					if (!obj || !obj.bytes) return null;
 					// Can't construct Blob in the AudioWorklet, so we translate it here
 					return new Blob([obj.bytes], {type: obj.type});
 				};
@@ -199,10 +209,13 @@ export default class ClapAudioNode {
 							effectNode.webviewOpen(true, !document.hidden);
 						});
 						let src = webview;
+						if (typeof src === 'string') {
+							src = src.replace(/[\x00-\x1F]/g, '');
+						}
 						if (/^file:/.test(src) && uiOptions?.filePrefix) {
-							src = uiOptions.filePrefix + webview.replace(/^file:\/*/, '/');
+							src = uiOptions.filePrefix + src.replace(/^file:\/*/, '/');
 						} else if (src[0] == "/" && uiOptions?.resourcePrefix) {
-							src = uiOptions.resourcePrefix + webview;
+							src = uiOptions.resourcePrefix + src;
 						}
 						iframe.src = new URL(src, document.baseURI);
 						effectNode.webviewOpen(true, !document.hidden);

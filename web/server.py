@@ -3,6 +3,14 @@ import sys
 from http.server import HTTPServer, SimpleHTTPRequestHandler, test
 
 class CustomRequestHandler (SimpleHTTPRequestHandler):
+	extensions_map = SimpleHTTPRequestHandler.extensions_map.copy()
+	extensions_map.update({
+		'.js': 'text/javascript',
+		'.mjs': 'text/javascript',
+		'.wasm': 'application/wasm',
+		'.json': 'application/json',
+	})
+
 	def end_headers (self):
 		self.send_header('Access-Control-Allow-Origin', 'same-origin')
 		self.send_header('Cross-Origin-Opener-Policy', 'same-origin')

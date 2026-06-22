@@ -3,6 +3,7 @@
 	<head>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="icon" href="data:,">
 		<title>WCLAP Test Host</title>
 		<style>
 			* {
@@ -229,8 +230,8 @@
 		<div id="after"></div>
 		<dialog id="pause-overlay">AudioContext paused</dialog>
 		<script type="module">
-			import ClapAudioNode from "./clap-audionode/clap-audionode.mjs";
-			import _for_debug from "./clap-audionode/clap-audioworkletprocessor.mjs"; // just to sanity-check syntax
+			import ClapAudioNode from "./clap-audionode/clap-audionode.mjs?v=20260623u";
+			import _for_debug from "./clap-audionode/clap-audioworkletprocessor.mjs?v=20260623u"; // just to sanity-check syntax
 			
 			async function startPage() {
 				let pageProxy = await pageProxyReady;
@@ -423,10 +424,11 @@
 					input.step = param.flags.stepped ? 1 : 1e-6;
 					let writeValue = input.oninput = async e => {
 						param.value = await effectNode.setParam(param.id, parseFloat(input.value));
-						output.textContent = param.value.text;
+						if (param.value) output.textContent = param.value.text;
 					};
 					let readValue = async e => {
 						param.value = await effectNode.getParam(param.id);
+						if (!param.value) return;
 						input.value = param.value.value;
 						output.textContent = param.value.text;
 					};
@@ -438,8 +440,12 @@
 					};
 					
 					let output = document.createElement('output');
-					if (!param.value) debugger;
-					output.textContent = param.value.text;
+					if (!param.value) {
+						console.warn('Parameter value was not ready yet:', param.id);
+						output.textContent = '';
+					} else {
+						output.textContent = param.value.text;
+					}
 
 					label.append(name, input, output);
 					group.append(label);
@@ -458,7 +464,10 @@
 					iframe.id = frameId;
 					iframe[pageProxy.symbol] = async path => {
 						if (/^\/file\//.test(path)) {
-							return effectNode.getFile(path.substr(5));
+							let relPath = path.substr(5);
+							let file = await effectNode.getFile(relPath);
+							if (file != null) return file;
+							return effectNode.getResource('/' + relPath.replace(/^\/+/, ''));
 						} else if (/^\/get_resource\//.test(path)) {
 							return effectNode.getResource(path.substr(13));
 						}
@@ -492,7 +501,7 @@
 				if (effectNode.openInterface) {
 					$('#tab-params').addEventListener('click', _ => selectTab(false));
 					$('#tab-ui').addEventListener('click', _ => selectTab(true));
-					selectTab(true);
+					selectTab(false);
 				} else {
 					$('#tabs').style.display = 'none';
 					selectTab(false);
