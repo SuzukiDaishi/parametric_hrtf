@@ -1,0 +1,26 @@
+[package]
+name = "wclap-plugin"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Shared CLAP/WCLAP plugin scaffold (vendored from SuzukiDaishi/z-audio-dsp-plugin, MIT)."
+
+# Vendored verbatim from https://github.com/SuzukiDaishi/z-audio-dsp-plugin
+# (crates/wclap-plugin, MIT). Hand-rolled CLAP C-ABI glue that exports a
+# `clap_entry` wasm global so a `Plugin` impl becomes a real WCLAP module.
+# Kept as-is so it can be re-synced upstream; HRTF-specific code lives in
+# the `phrtf-webclap` crate instead.
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+# Provides the wasm `#[panic_handler]` + dlmalloc `#[global_allocator]`.
+# Disabled by `phrtf-webclap` because the DSP crate pulls in std, which
+# supplies its own panic handler + allocator.
+default = ["runtime"]
+runtime = ["dep:dlmalloc"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+dlmalloc = { version = "0.2", features = ["global"], optional = true }

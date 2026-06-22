@@ -1,0 +1,36 @@
+/* This lets us pass complex data structues back and forth, using `CborValue *`.
+
+The returned structures are thread-local, so they're safe as long as we're not somehow re-entrant.*/
+
+#pragma once
+
+#include "./common.h"
+
+#include "cbor-walker/cbor-walker.h"
+#include <vector>
+
+struct Bytes {
+	std::vector<unsigned char> buffer;
+	
+	signalsmith::cbor::CborWalker readCbor() {
+		return signalsmith::cbor::CborWalker(buffer.data(), buffer.data() + buffer.size());
+	}
+	
+	std::string readString() const {
+		return std::string{(const char *)buffer.data(), buffer.size()};
+	}
+	
+	signalsmith::cbor::CborWriter write() {
+		buffer.resize(0);
+		return signalsmith::cbor::CborWriter{buffer};
+	}
+};
+
+extern "C" {
+	Bytes * WASM_FN(createBytes)();
+	void WASM_FN(destroyBytes)(Bytes *);
+	unsigned char * WASM_FN(getBytesData)(Bytes *);
+	size_t WASM_FN(getBytesLength)(Bytes *);
+	// For passing in bytes as an argument
+	unsigned char * WASM_FN(resizeBytes)(Bytes *bytes, size_t length);
+}
