@@ -103,7 +103,7 @@ GUIに出すとよいパラメータ:
 ```text
 reference distance: 1.0 m
 minimum distance:   0.05 m
-max near gain:      +12 to +18 dB
+max near gain:      0 dB by default; raise only if you want an exaggerated close-up boost
 head radius:        0.0875 m
 head shadow:        6 to 10 dB
 proximity:          0 to 6 dB

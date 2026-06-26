@@ -19,7 +19,7 @@
 //! move distance gain outside this renderer, or split direct/reverb paths.
 
 use crate::air_absorption::{design_air_absorption_eq, AirAbsorptionEqConfig, Atmosphere};
-use crate::biquad::{high_shelf, BiquadChain, BiquadCoeffs};
+use crate::biquad::{high_shelf, peaking_eq, BiquadChain, BiquadCoeffs};
 use crate::delay::FractionalDelay;
 use crate::geometry::{compute_ear_geometry, inverse_distance_gain, Direction3D, EarGeometry};
 use crate::math::{clamp, wrap_180};
@@ -29,6 +29,13 @@ use crate::phrtf::{
     PhrtfProfile,
 };
 use crate::proximity::{design_proximity_eq, ProximityConfig};
+
+const OUTPUT_SOFT_LIMIT_THRESHOLD: f32 = 0.85;
+const OUTPUT_SOFT_LIMIT_CEILING: f32 = 0.98;
+const LATERAL_PHRTF_STRENGTH_FLOOR: f32 = 0.45;
+const LATERAL_PINNA_PEAK_HZ: f32 = 6_100.0;
+const LATERAL_PINNA_PEAK_GAIN_DB: f32 = 4.0;
+const LATERAL_PINNA_PEAK_Q: f32 = 1.1;
 
 /// Main renderer configuration.
 #[derive(Clone, Copy, Debug)]
@@ -43,6 +50,8 @@ pub struct RendererConfig {
     /// Prevents infinite gain when a source reaches the listener.
     pub min_distance_m: f32,
     /// Maximum distance-gain boost when distance < reference.
+    /// Set to 0 dB to keep the closest point at unity gain and only attenuate
+    /// farther sources.
     pub max_near_gain_db: f32,
 
     pub phrtf_profile: PhrtfProfile,
@@ -84,7 +93,7 @@ impl RendererConfig {
             head_radius_m: 0.0875,
             reference_distance_m: 1.0,
             min_distance_m: 0.05,
-            max_near_gain_db: 18.0,
+            max_near_gain_db: 0.0,
 
             phrtf_profile: PhrtfProfile::default(),
             phrtf_config: PhrtfConfig::default(),
@@ -101,7 +110,7 @@ impl RendererConfig {
 
             max_broadband_ild_db: 2.5,
             max_head_shadow_db: 8.0,
-            head_shadow_shelf_hz: 1_800.0,
+            head_shadow_shelf_hz: 3_600.0,
 
             phrtf_ear_offset_deg: 45.0,
         }
@@ -247,14 +256,15 @@ impl SpatialPhrtfRenderer {
             1.0
         };
 
-        // pHRTF spectral bands, designed independently per ear. The median-plane
-        // model maps a direction to a single `beta` (front=0, up=90, rear=180);
-        // we bias that `beta` toward the front for the ipsilateral ear and toward
-        // the rear for the contralateral (shadowed) ear, scaled by how lateral the
-        // source is. The two ears therefore get different peak/notch trajectories,
-        // which is the main horizontal-localization cue the shared cascade lacked.
+        // pHRTF spectral bands, designed independently per ear. The source model
+        // is fundamentally median-plane, so full-left/full-right directions must
+        // not receive the same full-strength P/N coloration as "straight up".
+        // Horizontal localization is carried mostly by ITD/ILD/head-shadow; the
+        // pHRTF contribution is reduced toward the sides while keeping a smaller
+        // ipsilateral/contralateral beta bias for spectral width.
         let (beta, vertical_strength) =
             beta_from_direction(direction, self.config.phrtf_config.lower_hemisphere_mode);
+        let phrtf_strength = vertical_strength * lateral_phrtf_strength(ear.lateral);
         let ear_offset = self.config.phrtf_ear_offset_deg.max(0.0) * ear.lateral.abs();
         // `ear.lateral` is +1 when the source is fully to the right.
         let (beta_left, beta_right) = if ear.lateral >= 0.0 {
@@ -268,24 +278,44 @@ impl SpatialPhrtfRenderer {
             self.config.phrtf_profile,
             self.config.phrtf_config,
             beta_left,
-            vertical_strength,
+            phrtf_strength,
         );
         let right_bands = design_phrtf_bands_beta(
             self.config.phrtf_profile,
             self.config.phrtf_config,
             beta_right,
-            vertical_strength,
+            phrtf_strength,
         );
-        self.left_phrtf
-            .set_coefficients(&left_bands.to_biquad_coefficients(sr));
-        self.right_phrtf
-            .set_coefficients(&right_bands.to_biquad_coefficients(sr));
+        let mut left_phrtf_coeffs = left_bands.to_biquad_coefficients(sr);
+        let mut right_phrtf_coeffs = right_bands.to_biquad_coefficients(sr);
+        let lateral_pinna_amount =
+            clamp(self.config.phrtf_ear_offset_deg / 45.0, 0.0, 1.0) * ear.lateral.abs();
+        add_lateral_pinna_peak(
+            &mut left_phrtf_coeffs,
+            sr,
+            if ear.lateral < 0.0 {
+                lateral_pinna_amount
+            } else {
+                0.0
+            },
+        );
+        add_lateral_pinna_peak(
+            &mut right_phrtf_coeffs,
+            sr,
+            if ear.lateral > 0.0 {
+                lateral_pinna_amount
+            } else {
+                0.0
+            },
+        );
+        self.left_phrtf.set_coefficients(&left_phrtf_coeffs);
+        self.right_phrtf.set_coefficients(&right_phrtf_coeffs);
         // Centre (un-biased) band set retained for inspection / debug export.
         let phrtf_bands = design_phrtf_bands_beta(
             self.config.phrtf_profile,
             self.config.phrtf_config,
             beta,
-            vertical_strength,
+            phrtf_strength,
         );
 
         // Air absorption: same for both ears in this simplified model.
@@ -353,7 +383,7 @@ impl SpatialPhrtfRenderer {
         l = self.left_head_shadow.process(l);
         r = self.right_head_shadow.process(r);
 
-        (l, r)
+        (soft_limit_output(l), soft_limit_output(r))
     }
 
     /// Process a mono buffer into separate left/right slices.
@@ -392,14 +422,59 @@ impl SpatialPhrtfRenderer {
     /// swinging all the way around the front when the target wraps from `+179°`
     /// to `-179°` — which would otherwise be heard as a discontinuity at the
     /// back.
-    pub fn smoothed_direction(current: Direction3D, target: Direction3D, alpha: f32) -> Direction3D {
+    pub fn smoothed_direction(
+        current: Direction3D,
+        target: Direction3D,
+        alpha: f32,
+    ) -> Direction3D {
         let a = clamp(alpha, 0.0, 1.0);
         let az_delta = wrap_180(target.azimuth_deg - current.azimuth_deg);
         Direction3D {
             azimuth_deg: wrap_180(current.azimuth_deg + az_delta * a),
-            elevation_deg: current.elevation_deg + (target.elevation_deg - current.elevation_deg) * a,
+            elevation_deg: current.elevation_deg
+                + (target.elevation_deg - current.elevation_deg) * a,
             distance_m: current.distance_m + (target.distance_m - current.distance_m) * a,
         }
+    }
+}
+
+#[inline]
+fn lateral_phrtf_strength(lateral: f32) -> f32 {
+    let amount = clamp(lateral.abs(), 0.0, 1.0);
+    1.0 - amount * (1.0 - LATERAL_PHRTF_STRENGTH_FLOOR)
+}
+
+fn add_lateral_pinna_peak(
+    coeffs: &mut Vec<BiquadCoeffs>,
+    sample_rate_hz: f32,
+    lateral_amount: f32,
+) {
+    let amount = clamp(lateral_amount, 0.0, 1.0);
+    let gain_db = LATERAL_PINNA_PEAK_GAIN_DB * amount;
+    if gain_db > 0.001 {
+        coeffs.push(peaking_eq(
+            sample_rate_hz,
+            LATERAL_PINNA_PEAK_HZ,
+            LATERAL_PINNA_PEAK_Q,
+            gain_db,
+        ));
+    }
+}
+
+#[inline]
+fn soft_limit_output(x: f32) -> f32 {
+    let ax = x.abs();
+    if ax <= OUTPUT_SOFT_LIMIT_THRESHOLD {
+        return x;
+    }
+
+    let headroom = OUTPUT_SOFT_LIMIT_CEILING - OUTPUT_SOFT_LIMIT_THRESHOLD;
+    let excess = ax - OUTPUT_SOFT_LIMIT_THRESHOLD;
+    let limited = OUTPUT_SOFT_LIMIT_THRESHOLD + headroom * excess / (excess + headroom);
+    if x >= 0.0 {
+        limited
+    } else {
+        -limited
     }
 }
 
@@ -422,12 +497,20 @@ mod tests {
         let mut r = SpatialPhrtfRenderer::new(RendererConfig::new(48_000.0));
 
         // Directly in front: the two ears should be coloured (almost) identically.
-        r.update(Direction3D { azimuth_deg: 0.0, elevation_deg: 0.0, distance_m: 1.0 });
+        r.update(Direction3D {
+            azimuth_deg: 0.0,
+            elevation_deg: 0.0,
+            distance_m: 1.0,
+        });
         let front_gap = ear_response_gap(&r);
 
         // Hard right: ipsilateral/contralateral pHRTF trajectories now differ,
         // so the spectral gap between the ears must be clearly larger.
-        r.update(Direction3D { azimuth_deg: 90.0, elevation_deg: 0.0, distance_m: 1.0 });
+        r.update(Direction3D {
+            azimuth_deg: 90.0,
+            elevation_deg: 0.0,
+            distance_m: 1.0,
+        });
         let side_gap = ear_response_gap(&r);
 
         assert!(
@@ -445,7 +528,11 @@ mod tests {
         // the two pHRTF chains are the only thing under test.
         cfg.enable_head_shadow = false;
         let mut r = SpatialPhrtfRenderer::new(cfg);
-        r.update(Direction3D { azimuth_deg: 75.0, elevation_deg: 10.0, distance_m: 1.0 });
+        r.update(Direction3D {
+            azimuth_deg: 75.0,
+            elevation_deg: 10.0,
+            distance_m: 1.0,
+        });
         // With no per-ear bias the pHRTF cascades are identical, so the only
         // surviving difference is the (disabled) head shadow → ~0 dB gap.
         assert!(
@@ -457,7 +544,11 @@ mod tests {
     #[test]
     fn smoothing_converges_toward_target() {
         let start = Direction3D::front(1.0);
-        let target = Direction3D { azimuth_deg: 90.0, elevation_deg: 30.0, distance_m: 3.0 };
+        let target = Direction3D {
+            azimuth_deg: 90.0,
+            elevation_deg: 30.0,
+            distance_m: 3.0,
+        };
         let mut cur = start;
         for _ in 0..256 {
             cur = SpatialPhrtfRenderer::smoothed_direction(cur, target, 0.2);

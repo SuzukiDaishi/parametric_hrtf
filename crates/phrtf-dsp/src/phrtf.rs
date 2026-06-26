@@ -12,11 +12,16 @@
 
 use crate::biquad::{peaking_eq, BiquadCoeffs};
 use crate::geometry::Direction3D;
-use crate::math::{clamp, deg_to_rad, lerp, rad_to_deg};
+use crate::math::{clamp, deg_to_rad, lerp, rad_to_deg, smoothstep};
 
 /// How to handle the N1/N2 notch-frequency trajectory.
 #[derive(Clone, Copy, Debug)]
 pub enum NotchTrajectoryMode {
+    /// Median-plane trajectory calibrated against the local RIEC SOFA dummy-head
+    /// references. This follows Iida's qualitative PNP behavior: P1 remains
+    /// fixed while N1 rises quickly from the front toward the upper hemisphere
+    /// and relaxes again toward the rear.
+    SofaCalibratedMedianPlane,
     /// Polynomial using the Hz-scale coefficient interpretation used by this prototype.
     /// This gives kHz-scale notch movement over beta=0..180 degrees.
     IidaLikePolynomialHzScale,
@@ -67,23 +72,27 @@ pub struct PhrtfProfile {
 impl Default for PhrtfProfile {
     fn default() -> Self {
         Self {
-            // P1 is a broad concha-related peak around 4-6 kHz.
-            f_p1_hz: 4_500.0,
-            // P2 often appears around the 7-9 kHz region and helps upper localization.
-            f_p2_hz: 8_500.0,
+            // Tuned against the local RIEC dummy-head SOFA subjects in
+            // `hrtf_debug/sofa`: P1 sits around 3.8-4.5 kHz in front, while
+            // side incidence is handled by the renderer's lateral pinna peak.
+            f_p1_hz: 4_200.0,
+            // P2 has large listener variance in the SOFA set; the two local
+            // subjects repeatedly show useful energy around 6.5-7 kHz, so keep
+            // this lower and broad rather than forcing one subject's 10 kHz peak.
+            f_p2_hz: 6_800.0,
             // Front reference notch frequencies. These are strongly personal.
-            f_n1_front_hz: 8_000.0,
-            f_n2_front_hz: 11_500.0,
+            f_n1_front_hz: 8_200.0,
+            f_n2_front_hz: 11_300.0,
 
-            p1_gain_db: 5.0,
-            p2_gain_db: 3.0,
-            n1_gain_db: -12.0,
-            n2_gain_db: -10.0,
+            p1_gain_db: 6.0,
+            p2_gain_db: 2.0,
+            n1_gain_db: -11.0,
+            n2_gain_db: -6.0,
 
-            p1_q: 1.2,
-            p2_q: 1.5,
-            n1_q: 3.5,
-            n2_q: 3.0,
+            p1_q: 1.0,
+            p2_q: 1.4,
+            n1_q: 3.0,
+            n2_q: 2.0,
 
             p0_frequency_hz: 1_031.25,
             p0_q: 1.0,
@@ -108,8 +117,10 @@ pub struct PhrtfConfig {
 impl Default for PhrtfConfig {
     fn default() -> Self {
         Self {
-            trajectory_mode: NotchTrajectoryMode::IidaLikePolynomialHzScale,
-            lower_hemisphere_mode: LowerHemisphereMode::MirrorWithReducedStrength { strength: 0.35 },
+            trajectory_mode: NotchTrajectoryMode::SofaCalibratedMedianPlane,
+            lower_hemisphere_mode: LowerHemisphereMode::MirrorWithReducedStrength {
+                strength: 0.35,
+            },
             spectral_strength: 1.0,
             enable_p0: true,
             min_feature_hz: 1_000.0,
@@ -182,35 +193,68 @@ pub fn beta_from_direction(direction: Direction3D, mode: LowerHemisphereMode) ->
     let beta = clamp(rad_to_deg(frontal_cos.acos()), 0.0, 180.0);
 
     if up >= 0.0 {
-        (beta, 1.0)
-    } else {
-        match mode {
-            LowerHemisphereMode::ClampToHorizon => {
-                // Project to the nearest horizon (elevation → 0) but keep a
-                // smooth front/back angle so there is no step; only the cue
-                // depth is reduced. `acos(cos(az))` is the horizontal angle
-                // from the front and varies continuously through the sides.
-                let horizon_cos = clamp(az.cos(), -1.0, 1.0);
-                (clamp(rad_to_deg(horizon_cos.acos()), 0.0, 180.0), 0.15)
-            }
-            LowerHemisphereMode::MirrorWithReducedStrength { strength } => {
-                // `beta` is already even in elevation (cos is even), so the
-                // lower hemisphere mirrors the upper one automatically; we only
-                // scale the spectral depth.
-                (beta, clamp(strength, 0.0, 1.0))
-            }
+        return (beta, 1.0);
+    }
+
+    // Do not step the spectral cue depth at the horizon. A moving source that
+    // crosses elevation=0 would otherwise jump from full upper-hemisphere cues
+    // to reduced lower-hemisphere cues in one control update, which is audible
+    // as a click/pop.
+    let lower_amount = smoothstep(0.0, 1.0, clamp(-up, 0.0, 1.0));
+    match mode {
+        LowerHemisphereMode::ClampToHorizon => {
+            // Project to the nearest horizon (elevation → 0) but keep a smooth
+            // front/back angle so there is no step; only the cue depth is
+            // reduced gradually as the source moves further below the listener.
+            let horizon_cos = clamp(az.cos(), -1.0, 1.0);
+            let strength = lerp(1.0, 0.15, lower_amount);
+            (clamp(rad_to_deg(horizon_cos.acos()), 0.0, 180.0), strength)
+        }
+        LowerHemisphereMode::MirrorWithReducedStrength { strength } => {
+            // `beta` is already even in elevation (cos is even), so the lower
+            // hemisphere mirrors the upper one automatically; only cue depth
+            // fades toward the configured lower-hemisphere strength.
+            let strength = lerp(1.0, clamp(strength, 0.0, 1.0), lower_amount);
+            (beta, strength)
         }
     }
 }
 
 fn notch_delta_hz(beta_deg: f32, mode: NotchTrajectoryMode) -> (f32, f32) {
     let b = clamp(beta_deg, 0.0, 180.0);
-    let b2 = b * b;
-    let b3 = b2 * b;
-    let b4 = b3 * b;
 
     match mode {
+        NotchTrajectoryMode::SofaCalibratedMedianPlane => {
+            let dn1 = interpolate_beta_anchors(
+                b,
+                &[
+                    (0.0, 0.0),
+                    (30.0, 2_200.0),
+                    (60.0, 2_700.0),
+                    (90.0, 3_000.0),
+                    (120.0, 3_100.0),
+                    (150.0, 2_600.0),
+                    (180.0, 1_100.0),
+                ],
+            );
+            let dn2 = interpolate_beta_anchors(
+                b,
+                &[
+                    (0.0, 0.0),
+                    (30.0, 900.0),
+                    (60.0, 2_600.0),
+                    (90.0, 3_400.0),
+                    (120.0, 3_900.0),
+                    (150.0, 3_400.0),
+                    (180.0, 3_000.0),
+                ],
+            );
+            (dn1, dn2)
+        }
         NotchTrajectoryMode::IidaLikePolynomialHzScale => {
+            let b2 = b * b;
+            let b3 = b2 * b;
+            let b4 = b3 * b;
             // Coefficients chosen so that the polynomial produces kHz-scale movement.
             // This is the interpretation that makes the pHRTF perceptually meaningful.
             let dn1 = 1.001e-5 * b4 - 6.431e-3 * b3 + 8.686e-1 * b2 - 3.265e-1 * b;
@@ -218,11 +262,27 @@ fn notch_delta_hz(beta_deg: f32, mode: NotchTrajectoryMode) -> (f32, f32) {
             (dn1, dn2)
         }
         NotchTrajectoryMode::UserPastedSmallScalePolynomial => {
+            let b2 = b * b;
+            let b3 = b2 * b;
+            let b4 = b3 * b;
             let dn1 = 1.001e-7 * b4 - 6.431e-5 * b3 + 8.686e-3 * b2 - 3.265e-1 * b;
             let dn2 = 1.310e-7 * b4 - 5.154e-5 * b3 + 5.020e-3 * b2 + 2.563e-1 * b;
             (dn1, dn2)
         }
     }
+}
+
+fn interpolate_beta_anchors(beta_deg: f32, anchors: &[(f32, f32)]) -> f32 {
+    debug_assert!(anchors.len() >= 2);
+    for pair in anchors.windows(2) {
+        let (b0, v0) = pair[0];
+        let (b1, v1) = pair[1];
+        if beta_deg <= b1 {
+            let t = smoothstep(b0, b1, beta_deg);
+            return lerp(v0, v1, t);
+        }
+    }
+    anchors[anchors.len() - 1].1
 }
 
 fn p0_gain_db(beta_deg: f32) -> f32 {
@@ -233,6 +293,19 @@ fn p0_gain_db(beta_deg: f32) -> f32 {
     } else {
         lerp(3.0, 5.0, (beta_deg - 150.0) / 30.0)
     }
+}
+
+fn notch_elevation_shape(beta_deg: f32) -> (f32, f32, f32, f32) {
+    // Iida's PNP model treats P1 as a fixed reference peak, while N1/N2 are the
+    // main elevation-dependent cues. The local RIEC SOFA references follow that
+    // pattern: N1 becomes much shallower and broader near the zenith, but N2
+    // remains a useful high-frequency cue and should not disappear as much.
+    let horizon_amount = clamp((beta_deg - 90.0).abs() / 90.0, 0.0, 1.0);
+    let n1_gain_scale = lerp(0.32, 1.0, horizon_amount);
+    let n2_gain_scale = lerp(0.72, 1.0, horizon_amount);
+    let n1_q_scale = lerp(0.65, 1.0, horizon_amount);
+    let n2_q_scale = lerp(0.85, 1.0, horizon_amount);
+    (n1_gain_scale, n2_gain_scale, n1_q_scale, n2_q_scale)
 }
 
 /// Generate the pHRTF spectral bands for a direction.
@@ -266,6 +339,7 @@ pub fn design_phrtf_bands_beta(
     let beta = clamp(beta_deg, 0.0, 180.0);
     let vertical_strength = clamp(vertical_strength, 0.0, 1.0);
     let strength = clamp(config.spectral_strength, 0.0, 4.0) * vertical_strength;
+    let (n1_gain_scale, n2_gain_scale, n1_q_scale, n2_q_scale) = notch_elevation_shape(beta);
     let (dn1, dn2) = notch_delta_hz(beta, config.trajectory_mode);
 
     let f_n1 = clamp(
@@ -295,14 +369,14 @@ pub fn design_phrtf_bands_beta(
     bands.push(PhrtfBand {
         name: "N1",
         frequency_hz: f_n1,
-        gain_db: profile.n1_gain_db * strength,
-        q: profile.n1_q,
+        gain_db: profile.n1_gain_db * strength * n1_gain_scale,
+        q: profile.n1_q * n1_q_scale,
     });
     bands.push(PhrtfBand {
         name: "N2",
         frequency_hz: f_n2,
-        gain_db: profile.n2_gain_db * strength,
-        q: profile.n2_q,
+        gain_db: profile.n2_gain_db * strength * n2_gain_scale,
+        q: profile.n2_q * n2_q_scale,
     });
 
     if config.enable_p0 {

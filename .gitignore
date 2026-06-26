@@ -4,3 +4,7 @@
 # copied to `web/parametric-hrtf.wclap.tar.gz`, which IS committed so the
 # bundled host runs out of the box.
 /dist
+
+# Local SOFA references used by hrtf_debug/analyze_sofa.py. These are large
+# measurement assets and are not needed by the runtime or WebCLAP bundle.
+/hrtf_debug/sofa/*.sofa

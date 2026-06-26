@@ -213,6 +213,7 @@
 		<div id="background2"></div>
 		<audio id="media" controls loop crossorigin></audio>
 		<div id="buttons">
+			<select id="select-module-url" title="select module"></select>
 			<select id="select-plugin-id" title="select plugin"></select>
 			<button id="button-link" title="copy link with state">🔗</button>
 			<button id="button-stopengine" title="stop audio engine">🛑</button>
@@ -230,8 +231,18 @@
 		<div id="after"></div>
 		<dialog id="pause-overlay">AudioContext paused</dialog>
 		<script type="module">
-			import ClapAudioNode from "./clap-audionode/clap-audionode.mjs?v=20260623u";
-			import _for_debug from "./clap-audionode/clap-audioworkletprocessor.mjs?v=20260623u"; // just to sanity-check syntax
+			import ClapAudioNode from "./clap-audionode/clap-audionode.mjs?v=20260626mime";
+			import _for_debug from "./clap-audionode/clap-audioworkletprocessor.mjs?v=20260626mime"; // just to sanity-check syntax
+
+			const DEFAULT_MODULE_URL = "parametric-hrtf.wclap.tar.gz";
+			const TARGET_WASM_MODULE_URL = "target/wasm32-unknown-unknown/release/phrtf_webclap.wasm";
+			const MODULE_OPTIONS = [
+				{label: "Parametric HRTF (.wclap)", url: DEFAULT_MODULE_URL},
+				{label: "Parametric HRTF (target wasm)", url: TARGET_WASM_MODULE_URL},
+				{label: "Signalsmith Basics", url: "examples/signalsmith-basics/basics.wclap.tar.gz"},
+				{label: "Signalsmith CLAP examples", url: "examples/signalsmith-clap-cpp/example-plugins.wclap.tar.gz"},
+			];
+			const TARGET_WASM_UI_ASSETS = ["index.html", "main.js", "protocol.js", "styles.css"];
 			
 			async function startPage() {
 				let pageProxy = await pageProxyReady;
@@ -306,6 +317,13 @@
 					// Reloads the whole page
 					location.href = '?' + queryParams;
 				};
+				$('#select-module-url').onchange = _ => {
+					queryParams.set("module", $('#select-module-url').value);
+					queryParams.delete('plugin');
+					queryParams.delete('state');
+					// Reloads the whole page
+					location.href = '?' + queryParams;
+				};
 				$('#button-link').onclick = async e => {
 					navigator.clipboard.writeText(location.href);
 					await updateQueryState();
@@ -322,9 +340,40 @@
 					location.href = '?' + queryParams;
 				};
 				
-				let wasmUrl = queryParams.get('module') || 'examples/signalsmith-basics/basics.wclap.tar.gz';
+				let wasmUrl = queryParams.get('module') || DEFAULT_MODULE_URL;
+				let moduleSelect = $('#select-module-url');
+				let selectedModuleKnown = false;
+				MODULE_OPTIONS.forEach(moduleOption => {
+					let option = document.createElement('option');
+					option.value = moduleOption.url;
+					option.textContent = moduleOption.label;
+					option.selected = moduleOption.url == wasmUrl;
+					selectedModuleKnown = selectedModuleKnown || option.selected;
+					moduleSelect.appendChild(option);
+				});
+				if (!selectedModuleKnown) {
+					let option = document.createElement('option');
+					option.value = wasmUrl;
+					option.textContent = `Custom module: ${wasmUrl}`;
+					option.selected = true;
+					moduleSelect.appendChild(option);
+				}
+
+				async function makeWclapOptions(url) {
+					let options = {url};
+					if (url == TARGET_WASM_MODULE_URL || url == `/${TARGET_WASM_MODULE_URL}`) {
+						options.files = {};
+						await Promise.all(TARGET_WASM_UI_ASSETS.map(async name => {
+							let response = await fetch(`_phrtf-webclap-ui/${name}`);
+							if (!response.ok) throw Error(`Failed to load UI asset: ${name}`);
+							options.files[`ui/${name}`] = await response.arrayBuffer();
+						}));
+					}
+					return options;
+				}
+
 				let module = new ClapAudioNode({
-					url: wasmUrl,
+					...(await makeWclapOptions(wasmUrl)),
 //					timerWorklet: true // for more accurate CPU estimate
 				});
 				let pluginId = queryParams.get('plugin') || null;

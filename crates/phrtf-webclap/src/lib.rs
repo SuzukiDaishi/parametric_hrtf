@@ -59,23 +59,159 @@ const AUTO: u32 = PARAM_IS_AUTOMATABLE;
 const TOGGLE: u32 = PARAM_IS_AUTOMATABLE | PARAM_IS_STEPPED;
 
 static PARAMS: &[ParamDef] = &[
-    ParamDef { id: P_AZIMUTH, flags: AUTO, name: b"Azimuth\0", module: b"\0", min: -180.0, max: 180.0, default: 0.0 },
-    ParamDef { id: P_ELEVATION, flags: AUTO, name: b"Elevation\0", module: b"\0", min: -90.0, max: 90.0, default: 0.0 },
-    ParamDef { id: P_DISTANCE, flags: AUTO, name: b"Distance\0", module: b"\0", min: 0.05, max: 20.0, default: 1.0 },
-    ParamDef { id: P_HEAD_RADIUS, flags: AUTO, name: b"Head Radius\0", module: b"\0", min: 0.06, max: 0.11, default: 0.0875 },
-    ParamDef { id: P_NEAR_GAIN, flags: AUTO, name: b"Near Gain\0", module: b"\0", min: 0.0, max: 24.0, default: 18.0 },
-    ParamDef { id: P_EN_ITD, flags: TOGGLE, name: b"ITD\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EN_ILD, flags: TOGGLE, name: b"ILD\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EN_HEAD_SHADOW, flags: TOGGLE, name: b"Head Shadow\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EN_DISTANCE_GAIN, flags: TOGGLE, name: b"Distance Gain\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EN_AIR, flags: TOGGLE, name: b"Air Absorption\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EN_PROXIMITY, flags: TOGGLE, name: b"Proximity\0", module: b"\0", min: 0.0, max: 1.0, default: 1.0 },
-    ParamDef { id: P_EAR_OFFSET, flags: AUTO, name: b"Ear Offset\0", module: b"\0", min: 0.0, max: 90.0, default: 45.0 },
-    ParamDef { id: P_SPECTRAL, flags: AUTO, name: b"Spectral Strength\0", module: b"\0", min: 0.0, max: 2.0, default: 1.0 },
-    ParamDef { id: P_N1_FRONT, flags: AUTO, name: b"N1 Front\0", module: b"\0", min: 4000.0, max: 14000.0, default: 8000.0 },
-    ParamDef { id: P_N2_FRONT, flags: AUTO, name: b"N2 Front\0", module: b"\0", min: 6000.0, max: 16000.0, default: 11500.0 },
-    ParamDef { id: P_P1, flags: AUTO, name: b"P1 Peak\0", module: b"\0", min: 3000.0, max: 7000.0, default: 4500.0 },
-    ParamDef { id: P_P2, flags: AUTO, name: b"P2 Peak\0", module: b"\0", min: 6000.0, max: 11000.0, default: 8500.0 },
+    ParamDef {
+        id: P_AZIMUTH,
+        flags: AUTO,
+        name: b"Azimuth\0",
+        module: b"\0",
+        min: -180.0,
+        max: 180.0,
+        default: 0.0,
+    },
+    ParamDef {
+        id: P_ELEVATION,
+        flags: AUTO,
+        name: b"Elevation\0",
+        module: b"\0",
+        min: -90.0,
+        max: 90.0,
+        default: 0.0,
+    },
+    ParamDef {
+        id: P_DISTANCE,
+        flags: AUTO,
+        name: b"Distance\0",
+        module: b"\0",
+        min: 0.05,
+        max: 20.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_HEAD_RADIUS,
+        flags: AUTO,
+        name: b"Head Radius\0",
+        module: b"\0",
+        min: 0.06,
+        max: 0.11,
+        default: 0.0875,
+    },
+    ParamDef {
+        id: P_NEAR_GAIN,
+        flags: AUTO,
+        name: b"Near Gain\0",
+        module: b"\0",
+        min: 0.0,
+        max: 24.0,
+        default: 0.0,
+    },
+    ParamDef {
+        id: P_EN_ITD,
+        flags: TOGGLE,
+        name: b"ITD\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EN_ILD,
+        flags: TOGGLE,
+        name: b"ILD\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EN_HEAD_SHADOW,
+        flags: TOGGLE,
+        name: b"Head Shadow\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EN_DISTANCE_GAIN,
+        flags: TOGGLE,
+        name: b"Distance Gain\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EN_AIR,
+        flags: TOGGLE,
+        name: b"Air Absorption\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EN_PROXIMITY,
+        flags: TOGGLE,
+        name: b"Proximity\0",
+        module: b"\0",
+        min: 0.0,
+        max: 1.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_EAR_OFFSET,
+        flags: AUTO,
+        name: b"Ear Offset\0",
+        module: b"\0",
+        min: 0.0,
+        max: 90.0,
+        default: 45.0,
+    },
+    ParamDef {
+        id: P_SPECTRAL,
+        flags: AUTO,
+        name: b"Spectral Strength\0",
+        module: b"\0",
+        min: 0.0,
+        max: 2.0,
+        default: 1.0,
+    },
+    ParamDef {
+        id: P_N1_FRONT,
+        flags: AUTO,
+        name: b"N1 Front\0",
+        module: b"\0",
+        min: 4000.0,
+        max: 14000.0,
+        default: 8000.0,
+    },
+    ParamDef {
+        id: P_N2_FRONT,
+        flags: AUTO,
+        name: b"N2 Front\0",
+        module: b"\0",
+        min: 6000.0,
+        max: 16000.0,
+        default: 11500.0,
+    },
+    ParamDef {
+        id: P_P1,
+        flags: AUTO,
+        name: b"P1 Peak\0",
+        module: b"\0",
+        min: 3000.0,
+        max: 7000.0,
+        default: 4500.0,
+    },
+    ParamDef {
+        id: P_P2,
+        flags: AUTO,
+        name: b"P2 Peak\0",
+        module: b"\0",
+        min: 6000.0,
+        max: 11000.0,
+        default: 8500.0,
+    },
 ];
 
 /// Control-rate glide coefficient applied once per process block. At a 128
@@ -180,8 +316,12 @@ impl Plugin for PhrtfPlugin {
             P_EN_PROXIMITY => self.set_cfg(|c| c.proximity.enabled = on),
             P_EAR_OFFSET => self.set_cfg(|c| c.phrtf_ear_offset_deg = v.clamp(0.0, 90.0)),
             P_SPECTRAL => self.set_cfg(|c| c.phrtf_config.spectral_strength = v.clamp(0.0, 2.0)),
-            P_N1_FRONT => self.set_cfg(|c| c.phrtf_profile.f_n1_front_hz = v.clamp(4000.0, 14000.0)),
-            P_N2_FRONT => self.set_cfg(|c| c.phrtf_profile.f_n2_front_hz = v.clamp(6000.0, 16000.0)),
+            P_N1_FRONT => {
+                self.set_cfg(|c| c.phrtf_profile.f_n1_front_hz = v.clamp(4000.0, 14000.0))
+            }
+            P_N2_FRONT => {
+                self.set_cfg(|c| c.phrtf_profile.f_n2_front_hz = v.clamp(6000.0, 16000.0))
+            }
             P_P1 => self.set_cfg(|c| c.phrtf_profile.f_p1_hz = v.clamp(3000.0, 7000.0)),
             P_P2 => self.set_cfg(|c| c.phrtf_profile.f_p2_hz = v.clamp(6000.0, 11000.0)),
             _ => {}
@@ -198,7 +338,12 @@ impl Plugin for PhrtfPlugin {
         self.tick();
 
         match ctx.stereo_io() {
-            Some(StereoIo { input_l, input_r, output_l, output_r }) => {
+            Some(StereoIo {
+                input_l,
+                input_r,
+                output_l,
+                output_r,
+            }) => {
                 let n = frames.min(output_l.len()).min(output_r.len());
                 if self.mono.len() < n {
                     self.mono.resize(n, 0.0);
@@ -206,8 +351,11 @@ impl Plugin for PhrtfPlugin {
                 for i in 0..n {
                     self.mono[i] = 0.5 * (input_l[i] + input_r[i]);
                 }
-                self.renderer
-                    .process_block(&self.mono[..n], &mut output_l[..n], &mut output_r[..n]);
+                self.renderer.process_block(
+                    &self.mono[..n],
+                    &mut output_l[..n],
+                    &mut output_r[..n],
+                );
             }
             None => silence(ctx),
         }
@@ -340,12 +488,18 @@ mod tests {
 
         p.set_param(P_AZIMUTH, 90.0);
         let (left, right) = settle_rms(&mut p, &input);
-        assert!(right > left * 1.05, "right ear should dominate: L={left}, R={right}");
+        assert!(
+            right > left * 1.05,
+            "right ear should dominate: L={left}, R={right}"
+        );
 
         // Mirror to the left and the asymmetry must flip.
         p.set_param(P_AZIMUTH, -90.0);
         let (left2, right2) = settle_rms(&mut p, &input);
-        assert!(left2 > right2 * 1.05, "left ear should dominate: L={left2}, R={right2}");
+        assert!(
+            left2 > right2 * 1.05,
+            "left ear should dominate: L={left2}, R={right2}"
+        );
     }
 
     #[test]
@@ -361,7 +515,10 @@ mod tests {
 
         let near_e = near.0 + near.1;
         let far_e = far.0 + far.1;
-        assert!(far_e < near_e * 0.6, "far source must be quieter: near={near_e}, far={far_e}");
+        assert!(
+            far_e < near_e * 0.6,
+            "far source must be quieter: near={near_e}, far={far_e}"
+        );
     }
 
     #[test]

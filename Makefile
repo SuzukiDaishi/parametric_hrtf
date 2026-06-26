@@ -7,6 +7,7 @@
 #   make dev           # bundle + serve in one go
 
 PORT ?= 8000
+PYTHON ?= python
 
 .PHONY: wasm-target test test-rust test-js bundle serve dev clean
 
@@ -25,7 +26,7 @@ bundle:
 	cargo xtask bundle-webclap --release
 
 serve:
-	./scripts/serve.sh $(PORT)
+	$(PYTHON) scripts/serve.py $(PORT)
 
 dev: bundle serve
 

@@ -6,19 +6,11 @@ set -euo pipefail
 
 PORT="${1:-8000}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WEB="$ROOT/web"
 
-if [ ! -f "$WEB/parametric-hrtf.wclap.tar.gz" ]; then
-  echo "Bundle missing — building it first (cargo xtask bundle-webclap --release)…"
-  ( cd "$ROOT" && cargo xtask bundle-webclap --release )
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON=python3
+else
+  PYTHON=python
 fi
 
-URL="http://localhost:$PORT/?module=parametric-hrtf.wclap.tar.gz&audio=audio/loop.mp3"
-echo "────────────────────────────────────────────────────────────"
-echo " Parametric HRTF — WebCLAP test host"
-echo " Open: $URL"
-echo " (click once to start audio, then drag the source on the pad)"
-echo "────────────────────────────────────────────────────────────"
-
-cd "$WEB"
-exec python3 server.py "$PORT"
+exec "$PYTHON" "$ROOT/scripts/serve.py" "$PORT"

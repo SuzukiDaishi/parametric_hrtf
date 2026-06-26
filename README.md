@@ -21,7 +21,7 @@ A full processing chain per ear, all parametric and real-time friendly:
   original shared-cascade prototype (see `Ear Spread` in the GUI).
 - **ITD** (Woodworth spherical-head) + **broadband ILD**.
 - **Head-shadow** high-shelf on the far ear.
-- **Distance gain** (1/r pressure law) with a near-field boost cap.
+- **Distance gain** (1/r pressure law) with optional near-field boost.
 - **Air absorption** EQ (ISO 9613-1 approximation).
 - **Proximity** low-shelf (microphone-style near-field boost).
 - **Control-rate smoothing**: position glides toward its target every block, so
@@ -66,7 +66,7 @@ Click once to start audio, switch to the **UI** tab, and:
 
 You can also drag-and-drop your own audio file onto the host page.
 
-> The host needs cross-origin isolation; `scripts/serve.sh` uses the vendored
+> The host needs cross-origin isolation; `scripts/serve.py` uses the vendored
 > `web/server.py`, which sends the required `COOP`/`COEP` headers. Any static
 > server that sets those headers works too.
 
@@ -97,7 +97,7 @@ loads in any WebCLAP host (the bundled `web/` one, or e.g.
 | 1  | Elevation | -90…90° | |
 | 2  | Distance | 0.05…20 m | |
 | 3  | Head Radius | 0.06…0.11 m | |
-| 4  | Near Gain | 0…24 dB | near-field boost cap |
+| 4  | Near Gain | 0…24 dB | optional near-field boost cap |
 | 5–10 | ITD / ILD / Head Shadow / Distance Gain / Air / Proximity | on/off | |
 | 11 | Ear Offset | 0…90° | per-ear pHRTF divergence |
 | 12 | Spectral Strength | 0…2 | pHRTF depth |

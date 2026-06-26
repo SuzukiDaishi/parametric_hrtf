@@ -1,4 +1,4 @@
-import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs?v=20260623u";
+import {getHost, startHost, getWclap} from "./wclap-js/wclap.mjs?v=20260626mime";
 import {hostImports, startThreadWorker} from "./host-imports.mjs";
 import CBOR from "./cbor.mjs";
 
@@ -84,7 +84,7 @@ export default class ClapAudioNode {
 
 		// Add the AudioWorkletProcessor module
 		if (!audioContext[this.#moduleAddedToAudioContext]) {
-			let moduleUrl = new URL('./clap-audioworkletprocessor.mjs?v=20260623u', import.meta.url);
+			let moduleUrl = new URL('./clap-audioworkletprocessor.mjs?v=20260626mime', import.meta.url);
 			await audioContext.audioWorklet.addModule(moduleUrl);
 		}
 		audioContext[this.#moduleAddedToAudioContext] = true;

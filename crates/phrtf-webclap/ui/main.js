@@ -13,7 +13,7 @@ const state = {
   [P.ELEVATION]: 0,
   [P.DISTANCE]: 1,
   [P.HEAD_RADIUS]: 0.0875,
-  [P.NEAR_GAIN]: 18,
+  [P.NEAR_GAIN]: 0,
   [P.EN_ITD]: 1,
   [P.EN_ILD]: 1,
   [P.EN_HEAD_SHADOW]: 1,
